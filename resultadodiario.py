@@ -1,7 +1,7 @@
-Python
+import io
 import pandas as pd
+import requests
 import streamlit as st
-import time
 
 st.set_page_config(page_title="Resultado Diario MTY 2", layout="wide")
 
