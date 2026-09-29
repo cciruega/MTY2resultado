@@ -48,5 +48,6 @@ def generar_html_dashboard(df):
         except IndexError:
             return ""
 
-    # 1. Cabecera y títulos de Cierre del Día
-    html = f"""
+    # Iniciamos el contenedor y la tabla (usamos líneas simples para evitar errores de sintaxis)
+    html = ""
+    html += '
