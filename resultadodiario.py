@@ -1,6 +1,10 @@
 import gspread
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+
+# Dibuja el HTML en un contenedor dedicado con altura ajustable
+components.html(tabla_estilizada, height=800, scrolling=True)
 
 from google.oauth2.service_account import Credentials
 from html import escape
@@ -341,7 +345,7 @@ if df_sheets is not None and not df_sheets.empty:
 
     tabla_estilizada = generar_html_dashboard(df_sheets)
 
-    st.markdown(
+    st.html(
         tabla_estilizada,
         unsafe_allow_html=True
     )
