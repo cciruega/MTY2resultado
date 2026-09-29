@@ -345,10 +345,7 @@ if df_sheets is not None and not df_sheets.empty:
 
     tabla_estilizada = generar_html_dashboard(df_sheets)
 
-    st.html(
-        tabla_estilizada,
-        unsafe_allow_html=True
-    )
+    st.html(tabla_estilizada)
 
 else:
 
