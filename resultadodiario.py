@@ -10,11 +10,11 @@ from html import escape
 # ============================================================
 
 st.set_page_config(
-    page_title="Resultado Diario MTY 2",
+    page_title="Avance Resultados MTY 2",
     layout="wide"
 )
 
-st.title("📊 Monitoreo en Línea - Resultado Diario MTY 2")
+st.title("📊 Avance Resultados MTY 2")
 
 
 # ============================================================
