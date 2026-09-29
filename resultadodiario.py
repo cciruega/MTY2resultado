@@ -41,7 +41,6 @@ def cargar_datos_gspread():
 def generar_html_dashboard(df):
     """Extrae las celdas del DataFrame y arma una tabla HTML idéntica al Excel"""
     
-    # Función auxiliar para evitar errores si una celda está vacía
     def get_val(r, c):
         try:
             val = df.iloc[r, c]
@@ -49,5 +48,5 @@ def generar_html_dashboard(df):
         except IndexError:
             return ""
 
-    # Estilos y encabezados de Cierre del Día
+    # 1. Cabecera y títulos de Cierre del Día
     html = f"""
