@@ -1,14 +1,10 @@
 import gspread
+from google.oauth2.service_account import Credentials
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Dibuja el HTML en un contenedor dedicado con altura ajustable
-components.html(tabla_estilizada, height=800, scrolling=True)
-
-from google.oauth2.service_account import Credentials
-from html import escape
-
+st.set_page_config(page_title="Resultado Diario MTY 2", layout="wide")
 
 # ============================================================
 # CONFIGURACIÓN DE STREAMLIT
