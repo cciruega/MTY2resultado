@@ -2,9 +2,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
+from html import escape
 
-st.set_page_config(page_title="Resultado Diario MTY 2", layout="wide")
 
 # ============================================================
 # CONFIGURACIÓN DE STREAMLIT
@@ -65,7 +64,7 @@ def cargar_datos_gspread():
                 worksheet = ws
                 break
 
-        # Si no encuentra el GID, utiliza la primera hoja
+        # Si no encuentra el GID, usar la primera hoja
         if worksheet is None:
             worksheet = sh.get_worksheet(0)
 
@@ -78,7 +77,9 @@ def cargar_datos_gspread():
         return df
 
     except Exception as e:
-        st.error(f"❌ Error al conectar con Google Sheets: {e}")
+        st.error(
+            f"❌ Error al conectar con Google Sheets: {e}"
+        )
         return None
 
 
@@ -98,6 +99,7 @@ def obtener_valor(df, fila, columna):
         if pd.isna(valor):
             return ""
 
+        # Escapar caracteres especiales para HTML
         return escape(str(valor))
 
     except (IndexError, TypeError):
@@ -193,25 +195,34 @@ def generar_html_dashboard(df):
     # CIERRE DEL DÍA
     # ========================================================
 
-    t_cierre = obtener_valor(df, 0, 0) or "Cierre del Día"
+    t_cierre = obtener_valor(
+        df, 0, 0
+    ) or "Cierre del Día"
 
     h.append(
         f'<div class="titulo-seccion">{t_cierre}</div>'
     )
 
-    # Tabla de cierre
+    # --------------------------------------------------------
+    # TABLA DE CIERRE
+    # --------------------------------------------------------
+
     h.append("""
         <table class="tabla-dashboard">
             <thead>
                 <tr>
     """)
 
-    # Encabezados
     columnas_cierre = [0, 3, 6, 9]
 
     for col in columnas_cierre:
-        encabezado = obtener_valor(df, 2, col)
-        h.append(f"<th>{encabezado}</th>")
+        encabezado = obtener_valor(
+            df, 2, col
+        )
+
+        h.append(
+            f"<th>{encabezado}</th>"
+        )
 
     h.append("""
                 </tr>
@@ -226,13 +237,23 @@ def generar_html_dashboard(df):
 
         for col in columnas_cierre:
 
-            etiqueta = obtener_valor(df, r, col)
-            valor = obtener_valor(df, r, col + 1)
+            etiqueta = obtener_valor(
+                df, r, col
+            )
+
+            valor = obtener_valor(
+                df, r, col + 1
+            )
 
             h.append(f"""
                 <td>
-                    <div class="dato-label">{etiqueta}</div>
-                    <div class="dato-valor">{valor}</div>
+                    <div class="dato-label">
+                        {etiqueta}
+                    </div>
+
+                    <div class="dato-valor">
+                        {valor}
+                    </div>
                 </td>
             """)
 
@@ -247,14 +268,21 @@ def generar_html_dashboard(df):
     # ESPACIO ENTRE SECCIONES
     # ========================================================
 
-    h.append('<div class="separador"></div>')
+    h.append(
+        '<div class="separador"></div>'
+    )
 
     # ========================================================
     # ARRANQUE DEL DÍA
     # ========================================================
 
-    t_arranque = obtener_valor(df, 10, 0) or "Arranque del Día"
-    subt = obtener_valor(df, 11, 3)
+    t_arranque = obtener_valor(
+        df, 10, 0
+    ) or "Arranque del Día"
+
+    subt = obtener_valor(
+        df, 11, 3
+    )
 
     h.append(
         f'<div class="titulo-seccion">{t_arranque}</div>'
@@ -265,19 +293,27 @@ def generar_html_dashboard(df):
             f'<div class="subtitulo">{subt}</div>'
         )
 
-    # Tabla de arranque
+    # --------------------------------------------------------
+    # TABLA DE ARRANQUE
+    # --------------------------------------------------------
+
     h.append("""
         <table class="tabla-dashboard arranque">
             <thead>
                 <tr>
     """)
 
-    # Encabezados de arranque
     columnas_arranque = [0, 3, 6, 9]
 
     for col in columnas_arranque:
-        encabezado = obtener_valor(df, 12, col)
-        h.append(f"<th>{encabezado}</th>")
+
+        encabezado = obtener_valor(
+            df, 12, col
+        )
+
+        h.append(
+            f"<th>{encabezado}</th>"
+        )
 
     h.append("""
                 </tr>
@@ -292,13 +328,23 @@ def generar_html_dashboard(df):
 
         for col in columnas_arranque:
 
-            etiqueta = obtener_valor(df, r, col)
-            valor = obtener_valor(df, r, col + 1)
+            etiqueta = obtener_valor(
+                df, r, col
+            )
+
+            valor = obtener_valor(
+                df, r, col + 1
+            )
 
             h.append(f"""
                 <td>
-                    <div class="dato-label">{etiqueta}</div>
-                    <div class="dato-valor">{valor}</div>
+                    <div class="dato-label">
+                        {etiqueta}
+                    </div>
+
+                    <div class="dato-valor">
+                        {valor}
+                    </div>
                 </td>
             """)
 
@@ -309,7 +355,10 @@ def generar_html_dashboard(df):
         </table>
     """)
 
-    # Cerrar dashboard
+    # ========================================================
+    # CERRAR CONTENEDOR
+    # ========================================================
+
     h.append("</div>")
 
     return "".join(h)
@@ -322,6 +371,7 @@ def generar_html_dashboard(df):
 st.sidebar.header("Configuración")
 
 if st.sidebar.button("🔄 Actualizar Datos Ahora"):
+
     st.cache_data.clear()
     st.rerun()
 
@@ -339,7 +389,9 @@ df_sheets = cargar_datos_gspread()
 
 if df_sheets is not None and not df_sheets.empty:
 
-    tabla_estilizada = generar_html_dashboard(df_sheets)
+    tabla_estilizada = generar_html_dashboard(
+        df_sheets
+    )
 
     st.html(tabla_estilizada)
 
@@ -347,5 +399,6 @@ else:
 
     st.warning(
         "⚠️ No se pudieron obtener los datos. "
-        "Revisa la conexión con Google Sheets y tus secretos de Streamlit."
+        "Revisa la conexión con Google Sheets y tus "
+        "secretos de Streamlit."
     )
