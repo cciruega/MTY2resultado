@@ -122,74 +122,85 @@ def generar_html_dashboard(df):
     # --------------------------------------------------------
 
     h.append("""
-    <style>
+<style>
 
-        .dashboard {
-            width: 100%;
-            font-family: Arial, sans-serif;
-        }
+    .dashboard {
+        width: 100%;
+        font-family: Arial, sans-serif;
+    }
 
-        .titulo-seccion {
-            font-size: 28px;
-            font-weight: bold;
-            margin-top: 20px;
-            margin-bottom: 5px;
-        }
+    /* Títulos de sección */
+    .titulo-seccion {
+        font-size: 20px;
+        font-weight: bold;
+        margin-top: 8px;
+        margin-bottom: 3px;
+    }
 
-        .subtitulo {
-            font-size: 16px;
-            margin-bottom: 15px;
-            color: #555;
-        }
+    /* Subtítulo */
+    .subtitulo {
+        font-size: 11px;
+        margin-bottom: 6px;
+        color: #555;
+    }
 
-        .tabla-dashboard {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            table-layout: fixed;
-        }
+    /* Tabla */
+    .tabla-dashboard {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 12px;
+        table-layout: fixed;
+    }
 
-        .tabla-dashboard th {
-            background-color: #1f4e78;
-            color: white;
-            padding: 12px;
-            text-align: center;
-            font-size: 16px;
-            border: 1px solid white;
-        }
+    /* Encabezados */
+    .tabla-dashboard th {
+        background-color: #1f4e78;
+        color: white;
+        padding: 5px 4px;
+        text-align: center;
+        font-size: 11px;
+        line-height: 1.1;
+        border: 1px solid white;
+    }
 
-        .tabla-dashboard td {
-            border: 1px solid #d0d0d0;
-            padding: 10px;
-            text-align: center;
-            vertical-align: middle;
-        }
+    /* Celdas */
+    .tabla-dashboard td {
+        border: 1px solid #d0d0d0;
+        padding: 4px 3px;
+        text-align: center;
+        vertical-align: middle;
+        line-height: 1.1;
+    }
 
-        .dato-label {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
+    /* Etiqueta */
+    .dato-label {
+        font-size: 10px;
+        font-weight: bold;
+        margin-bottom: 2px;
+        line-height: 1.1;
+    }
 
-        .dato-valor {
-            font-size: 24px;
-            font-weight: bold;
-        }
+    /* Valor */
+    .dato-valor {
+        font-size: 16px;
+        font-weight: bold;
+        line-height: 1;
+    }
 
-        .arranque .dato-valor {
-            background-color: #fce4d6;
-            padding: 8px;
-            border-radius: 6px;
-        }
+    /* Valores del arranque */
+    .arranque .dato-valor {
+        background-color: #fce4d6;
+        padding: 4px 3px;
+        border-radius: 4px;
+    }
 
-        .separador {
-            height: 15px;
-        }
+    /* Separación entre tablas */
+    .separador {
+        height: 5px;
+    }
 
-    </style>
-    """)
-
-    h.append('<div class="dashboard">')
+</style>
+""")
 
     # ========================================================
     # CIERRE DEL DÍA
