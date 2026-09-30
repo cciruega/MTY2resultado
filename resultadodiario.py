@@ -18,7 +18,7 @@ from streamlit_gsheets import GSheetsConnection
 # 1. CONFIGURACIÓN PRINCIPAL DE LA PÁGINA
 # ============================================================
 st.set_page_config(
-    page_title="Área Monterrey 2 (Seguimiento y Reportes)", 
+    page_title="Monterrey (Seguimiento y Reportes)", 
     page_icon="📊", 
     layout="wide"
 )
@@ -126,7 +126,7 @@ def obtener_archivo_clarodrive_telcel():
 # ============================================================
 # 3. CREACIÓN DEL MENÚ SUPERIOR
 # ============================================================
-st.title("Área Monterrey 2 (Seguimiento y Reportes)")
+st.title("Monterrey (Seguimiento y Reportes)")
 
 seleccion = option_menu(
     menu_title=None, 
