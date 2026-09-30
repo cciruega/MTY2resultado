@@ -129,7 +129,6 @@ def generar_html_dashboard(df):
         font-family: Arial, sans-serif;
     }
 
-    /* Títulos de sección */
     .titulo-seccion {
         font-size: 20px;
         font-weight: bold;
@@ -137,14 +136,12 @@ def generar_html_dashboard(df):
         margin-bottom: 3px;
     }
 
-    /* Subtítulo */
     .subtitulo {
         font-size: 11px;
         margin-bottom: 6px;
         color: #555;
     }
 
-    /* Tabla */
     .tabla-dashboard {
         width: 100%;
         border-collapse: collapse;
@@ -152,7 +149,6 @@ def generar_html_dashboard(df):
         table-layout: fixed;
     }
 
-    /* Encabezados */
     .tabla-dashboard th {
         background-color: #1f4e78;
         color: white;
@@ -163,7 +159,6 @@ def generar_html_dashboard(df):
         border: 1px solid white;
     }
 
-    /* Celdas */
     .tabla-dashboard td {
         border: 1px solid #d0d0d0;
         padding: 4px 3px;
@@ -172,7 +167,6 @@ def generar_html_dashboard(df):
         line-height: 1.1;
     }
 
-    /* Etiqueta */
     .dato-label {
         font-size: 10px;
         font-weight: bold;
@@ -180,21 +174,26 @@ def generar_html_dashboard(df):
         line-height: 1.1;
     }
 
-    /* CIERRE DEL DÍA - CREMA */
+    .dato-valor {
+        font-size: 16px;
+        font-weight: bold;
+        line-height: 1;
+    }
+
+    /* CIERRE = CREMA */
     .cierre .dato-valor {
-    background-color: #fce4d6;
-    padding: 4px 3px;
-    border-radius: 4px;
+        background-color: #fce4d6;
+        padding: 4px 3px;
+        border-radius: 4px;
     }
 
-    /* Valores del arranque */
+    /* ARRANQUE = VERDE */
     .arranque .dato-valor {
-    background-color: #d9ead3;
-    padding: 4px 3px;
-    border-radius: 4px;
+        background-color: #d9ead3;
+        padding: 4px 3px;
+        border-radius: 4px;
     }
 
-    /* Separación entre tablas */
     .separador {
         height: 5px;
     }
