@@ -1393,7 +1393,7 @@ def mostrar_tablero_bolsas():
                     tiendas_seleccionadas = st.sidebar.multiselect(
                         "🏪 Tienda / CAT:",
                         options=opciones_tiendas,
-                        default=[]
+                        default=[],
                         key=f"tablero_tiendas_{region_seleccionada}_{area_seleccionada_com}"
                     )
 
