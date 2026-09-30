@@ -400,21 +400,27 @@ df_sheets = cargar_datos_gspread()
 # RENDERIZAR DASHBOARD
 # ============================================================
 
-if not df_sheets.empty:
-    
-    # Imprimimos la hora de actualización entre el título principal y la tabla
-    st.markdown(f"**⏱️ Última lectura de datos:** `{hora_actualizacion}`")
+if resultado is not None:
+    # 1. Desempaquetamos los valores (¡Nota la indentación aquí!)
+    df_sheets, hora_actualizacion = resultado
 
-    tabla_estilizada = generar_html_dashboard(
-        df_sheets
-    )
+    # 2. Verificamos que la hoja tenga información
+    if not df_sheets.empty:
+        
+        # 3. Imprimimos la hora de actualización entre el título y la tabla
+        st.markdown(f"**⏱️ Última lectura de datos:** `{hora_actualizacion}`")
 
-    st.html(tabla_estilizada)
+        # 4. Generamos y dibujamos el HTML
+        tabla_estilizada = generar_html_dashboard(df_sheets)
+        st.html(tabla_estilizada)
+        
+    else:
+        # Qué pasa si conecta bien, pero la hoja está en blanco
+        st.info("ℹ️ La conexión fue exitosa, pero la hoja de Google Sheets está vacía.")
 
 else:
-
+    # Qué pasa si falla la conexión o las credenciales
     st.warning(
-
         "⚠️ No se pudieron obtener los datos. "
         "Revisa la conexión con Google Sheets y tus "
         "secretos de Streamlit."
