@@ -726,17 +726,12 @@ def mostrar_tablero_bolsas():
     # ---------------------------------------------------------
     ocultar_iconos = """
     <style>
-    /* 1. Ocultar el encabezado completo (desaparece Fork, GitHub y Menú) */
-    [data-testid="stHeader"] {
-        display: none !important;
-    }
-
-    /* 2. Ocultar pie de página (marca de agua de Streamlit) */
+    /* 1. Ocultar pie de página (marca de agua de Streamlit) */
     footer {
         display: none !important;
     }
 
-    /* 3. Ocultar el espacio en blanco que deja el encabezado al desaparecer */
+    /* 2. Ocultar el espacio en blanco que deja el encabezado al desaparecer */
     .stApp > header {
         background-color: transparent !important;
     }
