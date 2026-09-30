@@ -33,7 +33,7 @@ GID = 404326982
 def cargar_datos_gspread():
     """
     Conecta con Google Sheets y devuelve los datos
-    de la hoja cuyo GID coincida con GID.
+    de la hoja cuyo GID coincida con GID, junto con la hora de actualización.
     """
 
     try:
@@ -74,7 +74,10 @@ def cargar_datos_gspread():
         # Convertir a DataFrame
         df = pd.DataFrame(data)
 
-        return df
+        # Capturar la hora exacta de lectura en Monterrey
+        hora_extrac = pd.Timestamp.now(tz="America/Monterrey").strftime("%d/%m/%Y a las %I:%M %p")
+
+        return df, hora_extrac
 
     except Exception as e:
         st.error(
@@ -397,8 +400,8 @@ df_sheets = cargar_datos_gspread()
 # RENDERIZAR DASHBOARD
 # ============================================================
 
-if df_sheets is not None and not df_sheets.empty:
-
+if not df_sheets.empty:
+    
     # Imprimimos la hora de actualización entre el título principal y la tabla
     st.markdown(f"**⏱️ Última lectura de datos:** `{hora_actualizacion}`")
 
@@ -411,7 +414,8 @@ if df_sheets is not None and not df_sheets.empty:
 else:
 
     st.warning(
+
         "⚠️ No se pudieron obtener los datos. "
         "Revisa la conexión con Google Sheets y tus "
         "secretos de Streamlit."
-    )
+    ) 
