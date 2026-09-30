@@ -586,7 +586,7 @@ else:
     )
     #
     
-elif seleccion == "Reporte Telcel":
+elif seleccion == "Reporte Telcel"
     # -------------------------------------------------------------------------
     # CÓDIGO TELCEL INTEGRADO Y FILTRADO A MTY 2
     # -------------------------------------------------------------------------
