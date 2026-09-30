@@ -180,13 +180,6 @@ def generar_html_dashboard(df):
         line-height: 1.1;
     }
 
-    /* Valor */
-    .dato-valor {
-        font-size: 16px;
-        font-weight: bold;
-        line-height: 1;
-    }
-
     /* CIERRE DEL DÍA - CREMA */
     .cierre .dato-valor {
     background-color: #fce4d6;
