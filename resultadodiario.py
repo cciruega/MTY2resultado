@@ -751,7 +751,6 @@ def mostrar_tablero_bolsas():
         index=0,
         key="tablero_region"
     )
-    st.sidebar.divider()
     # ---------------------------------------------------------
 
     # --- INYECCIÓN DE CSS PARA COMPACTAR, ESCALAR Y HACER RESPONSIVAS LAS TABLAS ---
