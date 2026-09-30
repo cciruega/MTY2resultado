@@ -399,9 +399,8 @@ df_sheets = cargar_datos_gspread()
 
 if df_sheets is not None and not df_sheets.empty:
 
-    tabla_estilizada = generar_html_dashboard(
-        df_sheets, ultima_act = resultado
-    )
+    tabla_estilizada = generar_html_dashboard(df_sheets)
+    components.html(tabla_estilizada, height=600, scrolling=True)
 
 # Imprimimos la hora de actualización de manera discreta
     st.markdown(f"**⏱️ Última lectura de datos:** `{ultima_act}`")
