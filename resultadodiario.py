@@ -640,7 +640,7 @@ def mostrar_reporte_telcel():
                     total_asesores = 0
                     total_meta = 0
 
-                    for cac in cacs_mty2:
+                    for cac in cacs_mty:
                         avance_fila = resumen_cacs[resumen_cacs['NOM_ESTRATEGIA'] == cac]
                         avance = avance_fila['Avance Mes'].values[0] if not avance_fila.empty else 0
 
@@ -685,8 +685,8 @@ def mostrar_reporte_telcel():
                         }
                     )
 
-                    # Botón de descarga exclusivo para MTY 2
-                    df_detalle_area = df_filtrado_t[df_filtrado_t['NOM_ESTRATEGIA'].isin(cacs_mty2)]
+                    # Botón de descarga exclusivo para MTY
+                    df_detalle_area = df_filtrado_t[df_filtrado_t['NOM_ESTRATEGIA'].isin(cacs_mty)]
                     generar_boton_descarga_telcel(df_detalle_area, "Detalle_MONTERREY_2", "btn_descarga_mty2")
 
                 else:
