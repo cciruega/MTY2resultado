@@ -736,17 +736,12 @@ def mostrar_tablero_bolsas():
         display: none !important;
     }
 
-    /* 3. Ocultar el menú de hamburguesa nativo */
-    #MainMenu {
-        display: none !important;
-    }
-
-    /* 4. Ocultar pie de página (marca de agua de Streamlit) */
+    /* 3. Ocultar pie de página (marca de agua de Streamlit) */
     footer {
         display: none !important;
     }
 
-    /* 5. Ocultar el espacio en blanco que deja el encabezado al desaparecer */
+    /* 4. Ocultar el espacio en blanco que deja el encabezado al desaparecer */
     .stApp > header {
         background-color: transparent !important;
     }
