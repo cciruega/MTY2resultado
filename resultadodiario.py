@@ -853,8 +853,9 @@ def mostrar_tablero_bolsas():
 
     if usar_manual:
         archivo_a_procesar = st.file_uploader("Arrastra aquí tu archivo de Excel", type=['xlsx'])
-
-
+    
+    st.divider ()
+    
     # ---------------------------------------------------------
     # PROCESAMIENTO GENERAL
     # ---------------------------------------------------------
