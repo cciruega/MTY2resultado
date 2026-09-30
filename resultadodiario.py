@@ -154,7 +154,7 @@ def generar_html_dashboard(df):
 
     /* Encabezados */
     .tabla-dashboard th {
-        background-color: #fcc595;
+        background-color: #1f4e78;
         color: white;
         padding: 5px 4px;
         text-align: center;
@@ -189,7 +189,7 @@ def generar_html_dashboard(df):
 
     /* Valores del arranque */
     .arranque .dato-valor {
-        background-color: #7fd1fa;
+        background-color: #fce4d6;
         padding: 4px 3px;
         border-radius: 4px;
     }
