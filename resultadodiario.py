@@ -737,106 +737,133 @@ def mostrar_reporte_telcel():
         # -------------------------------------------------------------------------
         st.subheader("📱 Reporte Telcel - MTY 2")
 
-        bytes_automatico, nombre_corto, fecha_actualizacion = obtener_archivo_clarodrive_telcel()
-        archivo_a_procesar_telcel = None
-
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if bytes_automatico:
-                archivo_automatico = io.BytesIO(bytes_automatico)
-                st.success(f"☁️ **Base de datos (Claro Drive):** {nombre_corto}  \n⏱️ **Actualizado:** {fecha_actualizacion}")
-                archivo_a_procesar_telcel = archivo_automatico
-            else:
-                st.warning("⚠️ No se pudo conectar con Claro Drive o la carpeta está vacía.")
-
-        with col2:
-            usar_manual = st.checkbox("Subir archivo manualmente", value=False if bytes_automatico else True)
-
-        if usar_manual:
-            archivo_a_procesar_telcel = st.file_uploader("Arrastra aquí tu archivo de Excel (Telcel)", type=['xlsx', 'xls'])
-
-        if archivo_a_procesar_telcel:
-            try:
-                df_telcel = cargar_datos_telcel(archivo_a_procesar_telcel)
-
-                st.sidebar.header("Filtros Telcel")
-                if 'MES_CAPTURA' in df_telcel.columns:
-                    df_telcel['MES_CAPTURA'] = pd.to_datetime(df_telcel['MES_CAPTURA'], errors='coerce')
-                    meses_disponibles = sorted(df_telcel['MES_CAPTURA'].dt.month.dropna().unique().astype(int).tolist())
-                    mes_actual = datetime.datetime.now().month
-                    default_index = meses_disponibles.index(mes_actual) if mes_actual in meses_disponibles else (len(meses_disponibles)-1 if meses_disponibles else 0)
-
-                    mes_seleccionado = st.sidebar.selectbox("Mes de Captura (Número)", meses_disponibles, index=default_index)
-                    df_filtrado_t = df_telcel[df_telcel['MES_CAPTURA'].dt.month == mes_seleccionado]
-                else:
-                    df_filtrado_t = df_telcel
-
-                if 'NOM_ESTRATEGIA' in df_filtrado_t.columns:
-                    resumen_cacs = df_filtrado_t.groupby('NOM_ESTRATEGIA').size().reset_index(name='Avance Mes')
-
-                    datos_area = []
-                    total_avance_mes = 0
-                    total_asesores = 0
-                    total_meta = 0
-
-                    for cac in cacs_mty2:
-                        avance_fila = resumen_cacs[resumen_cacs['NOM_ESTRATEGIA'] == cac]
-                        avance = avance_fila['Avance Mes'].values[0] if not avance_fila.empty else 0
-
-                        asesores = catalogo_asesores_mty2.get(cac, 0)
-                        meta = asesores * 2
-                        porcentaje = (avance / meta) if meta > 0 else 0
-                        nombre_mostrar = nombres_simples_mty2.get(cac, cac)
-
-                        datos_area.append({
-                            "Area/CAC": nombre_mostrar,
-                            "Avance Mes": avance,
-                            "Asesores": asesores,
-                            "Meta": meta,
-                            "Avance": porcentaje
-                        })
-                        total_avance_mes += avance
-                        total_asesores += asesores
-                        total_meta += meta
-
-                    total_porcentaje = (total_avance_mes / total_meta) if total_meta > 0 else 0
-
-                    datos_area.insert(0, {
-                        "Area/CAC": "[-] MONTERREY 2 (TOTAL)",
-                        "Avance Mes": total_avance_mes,
-                        "Asesores": total_asesores,
-                        "Meta": total_meta,
-                        "Avance": total_porcentaje
-                    })
-
-                    df_area = pd.DataFrame(datos_area)
-                    altura_tabla = (len(df_area) + 1) * 35 + 3
-
-                    st.dataframe(
-                        df_area.style.format({"Avance": "{:.0%}"}).map(colorear_semaforo, subset=['Avance']),
-                        width="content",  
-                        hide_index=True,
-                        height=altura_tabla,
-                        column_config={
-                            "Avance": st.column_config.ProgressColumn(
-                                "Avance", help="Cumplimiento de la meta", format="%.2f", min_value=0, max_value=1,
-                            )
-                        }
-                    )
-
-                    # Botón de descarga exclusivo para MTY 2
-                    df_detalle_area = df_filtrado_t[df_filtrado_t['NOM_ESTRATEGIA'].isin(cacs_mty2)]
-                    generar_boton_descarga_telcel(df_detalle_area, "Detalle_MONTERREY_2", "btn_descarga_mty2")
-
-                else:
-                    st.error("La columna 'NOM_ESTRATEGIA' no se encontró.")
-
-            except Exception as e:
-                st.error(f"Error al procesar: {e}")
+        if archivo_a_procesar:
+    try:
+        df = cargar_datos(archivo_a_procesar)
+        
+        st.sidebar.header("Filtros Principales")
+        
+        if 'MES_CAPTURA' in df.columns:
+            df['MES_CAPTURA'] = pd.to_datetime(df['MES_CAPTURA'], errors='coerce')
+            meses_disponibles = sorted(df['MES_CAPTURA'].dt.month.dropna().unique().astype(int).tolist())
+            mes_actual = datetime.datetime.now().month
+            
+            default_index = meses_disponibles.index(mes_actual) if mes_actual in meses_disponibles else (len(meses_disponibles)-1 if meses_disponibles else 0)
+            
+            mes_seleccionado = st.sidebar.selectbox("Mes de Captura (Número)", meses_disponibles, index=default_index)
+            
+            df_filtrado = df[df['MES_CAPTURA'].dt.month == mes_seleccionado]
         else:
-            st.info("Esperando archivo de Telcel...")
+            st.error("La columna 'MES_CAPTURA' no se encontró. Verifica el formato del archivo.")
+            df_filtrado = df
 
+        if 'NOM_ESTRATEGIA' in df_filtrado.columns:
+            
+            resumen_cacs = df_filtrado.groupby('NOM_ESTRATEGIA').size().reset_index(name='Avance Mes')
+            
+            st.header("Resultados por CAC asociado al Area TMX")
+            
+            ranking_areas = [] # <--- LISTA INICIADA AQUÍ
+            
+            for area, cacs in estructura_cac.items():
+                st.subheader(area)
+                
+                datos_area = []
+                total_avance_mes = 0
+                total_asesores = 0
+                total_meta = 0
+                
+                for cac in cacs:
+                    avance_fila = resumen_cacs[resumen_cacs['NOM_ESTRATEGIA'] == cac]
+                    avance = avance_fila['Avance Mes'].values[0] if not avance_fila.empty else 0
+                    
+                    asesores = catalogo_asesores.get(cac, 0)
+                    meta = asesores * 2
+                    
+                    porcentaje = (avance / meta) if meta > 0 else 0
+                    
+                    nombre_mostrar = nombres_simples.get(cac, cac)
+                    
+                    datos_area.append({
+                        "Area/CAC": nombre_mostrar,
+                        "Avance Mes": avance,
+                        "Asesores": asesores,
+                        "Meta": meta,
+                        "Avance": porcentaje
+                    })
+                    
+                    total_avance_mes += avance
+                    total_asesores += asesores
+                    total_meta += meta
+                    
+                total_porcentaje = (total_avance_mes / total_meta) if total_meta > 0 else 0
+                
+                # <--- GUARDADO EN LA LISTA AQUÍ
+                ranking_areas.append({
+                    "Área": area,
+                    "Cumplimiento %": total_porcentaje * 100
+                })
+                
+                datos_area.insert(0, {
+                    "Area/CAC": f"[-]{area} (TOTAL)",
+                    "Avance Mes": total_avance_mes,
+                    "Asesores": total_asesores,
+                    "Meta": total_meta,
+                    "Avance": total_porcentaje
+                })
+                    
+                df_area = pd.DataFrame(datos_area)
+                
+                # -----------------------------------------------------
+                # CÁLCULO DE ALTURA DINÁMICA
+                # -----------------------------------------------------
+                altura_tabla = (len(df_area) + 1) * 35 + 3
+                
+                # Creación ÚNICA de la tabla con todos los formatos visuales
+                st.dataframe(
+                    df_area.style.format({"Avance": "{:.0%}"}).map(colorear_semaforo, subset=['Avance']),
+                    width="content",  
+                    hide_index=True,
+                    height=altura_tabla,
+                    column_config={
+                        "Avance": st.column_config.ProgressColumn(
+                            "Avance",
+                            help="Cumplimiento de la meta",
+                            format="%.2f", 
+                            min_value=0,
+                            max_value=1,   
+                        )
+                    }
+                )
+                
+                # --- NUEVO: FILTRAR EL DETALLE PARA LA DESCARGA ---
+                # Recortamos la base original para obtener solo los folios de los CACs de esta área
+                df_detalle_area = df_filtrado[df_filtrado['NOM_ESTRATEGIA'].isin(cacs)]
+                
+                # Llamada a la función del botón (pasando el DETALLE en lugar del resumen)
+                area_limpia = area.replace(" ", "_")
+                generar_boton_descarga(
+                    df_detalle_area,  # <--- AQUÍ MANDAMOS LOS DATOS CRUDOS
+                    nombre_archivo=f"Detalle_{area_limpia}", # Cambiamos el nombre del archivo para que diga "Detalle"
+                    btn_key=f"btn_descarga_{area_limpia}"
+                )
+                
+                st.markdown("---")
+            
+            # <--- GRÁFICA FUERA DEL CICLO (MISMA ALINEACIÓN QUE EL FOR)
+            st.divider()
+            st.subheader("📊 Ranking Global de Cumplimiento")
+            df_ranking = pd.DataFrame(ranking_areas)
+            df_ranking = df_ranking.sort_values(by="Cumplimiento %", ascending=False)
+            st.bar_chart(df_ranking.set_index("Área")["Cumplimiento %"])
+                
+        else:
+            st.error("La columna 'NOM_ESTRATEGIA' no se encontró en la base de datos.")
 
+    except Exception as e:
+        st.error(f"Hubo un problema al leer el archivo. Error técnico: {e}")
+else:
+    st.info("Obteniendo datos de Claro Drive o en espera de subida manual...")
 
 def mostrar_tablero_bolsas():
         #
