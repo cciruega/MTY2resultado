@@ -218,7 +218,7 @@ def generar_html_dashboard(df):
     # --------------------------------------------------------
 
     h.append("""
-        <table class="tabla-dashboard">
+    <table class="tabla-dashboard cierre">
             <thead>
                 <tr>
     """)
