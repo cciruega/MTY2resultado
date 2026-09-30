@@ -756,17 +756,20 @@ def mostrar_tablero_bolsas():
     # ---------------------------------------------------------
 
     # ---------------------------------------------------------
-    # 🎛️ SELECTOR DE REGIÓN (NUEVO)
+    # 🎛️ FILTROS LATERALES DEL TABLERO
     # ---------------------------------------------------------
-    # Centramos el título y el selector para que se vea elegante
     st.markdown("<h1 style='text-align: center;'>📊 Tablero Operativo - Bolsas</h1>", unsafe_allow_html=True)
 
-    col_espacio1, col_selector, col_espacio2 = st.columns([1, 2, 1])
-    with col_selector:
-        region_seleccionada = st.selectbox(
-            "📍 Selecciona la Región a visualizar:",
-            ["Monterrey", "Tamaulipas"]
-        )
+    st.sidebar.header("🎛️ Filtros del Tablero Bolsas")
+    st.sidebar.caption("Por defecto: Monterrey 2")
+
+    region_seleccionada = st.sidebar.selectbox(
+        "📍 Región:",
+        ["Monterrey", "Tamaulipas"],
+        index=0,
+        key="tablero_region"
+    )
+    st.sidebar.divider()
     # ---------------------------------------------------------
 
     # --- INYECCIÓN DE CSS PARA COMPACTAR, ESCALAR Y HACER RESPONSIVAS LAS TABLAS ---
@@ -1182,27 +1185,51 @@ def mostrar_tablero_bolsas():
                 return df.style.apply(aplicar_colores, axis=1)
 
             # =========================================================
-            # 📂 CREACIÓN DE PESTAÑAS (OPERATIVA Y COMERCIAL)
+            # 🎛️ SELECTORES LATERALES DE VISTA Y ÁREA
             # =========================================================
+            st.sidebar.divider()
+            opciones_vista = ["🏢 Operativa (Por CT)"]
             if region_seleccionada == "Monterrey":
-                tab_operativa, tab_comercial = st.tabs(["🏢 Vista Operativa (Por CT)", "🏪 Vista Comercial (Por CAT)"])
-            else:
-                tab_operativa, = st.tabs(["🏢 Vista Operativa (Por CT)"])
+                opciones_vista.append("🏪 Comercial (Por CAT)")
+
+            vista_seleccionada = st.sidebar.selectbox(
+                "👁️ Vista:",
+                opciones_vista,
+                index=1 if region_seleccionada == "Monterrey" else 0,
+                key=f"tablero_vista_{region_seleccionada}"
+            )
+
+            # Usamos contenedores para conservar la lógica actual, pero ya sin pestañas.
+            if vista_seleccionada.startswith("🏢"):
+                tab_operativa = st.container()
                 tab_comercial = None
+            else:
+                tab_operativa = None
+                tab_comercial = st.container()
+
+            st.caption(f"Filtros activos → Región: {region_seleccionada} | {vista_seleccionada.replace('🏢 ', '').replace('🏪 ', '')}")
 
             # =========================================================
             # PESTAÑA 1: VISTA OPERATIVA
             # =========================================================
-            with tab_operativa:
+            if tab_operativa is not None:
+                with tab_operativa:
+                    pass
                 # 1. Obtener la lista de áreas únicas ya procesadas/corregidas
                 # Se usa dropna() para evitar que valores nulos rompan el filtro y sorted() para orden alfabético
                 areas_disponibles = sorted(df['AREA_CORREGIDA'].dropna().unique())
 
-                # 2. Crear el filtro multiselector en tu vista operativa
-                areas_seleccionadas = st.multiselect(
-                    "Selecciona el Área / CT:",
+                # 2. Filtro lateral. Por defecto arranca en MONTERREY 2.
+                if region_seleccionada == "Monterrey" and "MONTERREY 2" in areas_disponibles:
+                    default_areas = ["MONTERREY 2"]
+                else:
+                    default_areas = [areas_disponibles[0]] if areas_disponibles else []
+
+                areas_seleccionadas = st.sidebar.multiselect(
+                    "🏢 Área / CT:",
                     options=areas_disponibles,
-                    default=areas_disponibles # Al abrir el portal, todas las áreas de la región están seleccionadas
+                    default=default_areas,
+                    key=f"tablero_areas_{region_seleccionada}"
                 )
 
                 # 3. Filtrar el DataFrame original con las áreas que el usuario dejó en el selector
@@ -1344,10 +1371,16 @@ def mostrar_tablero_bolsas():
                     areas_disponibles = sorted(df['AREA_CORREGIDA'].dropna().unique().tolist())
                     opciones_filtro = ["Todas las Áreas"] + areas_disponibles
 
-                    area_seleccionada_com = st.radio(
-                        "🔎 Filtrar vista comercial por:", 
-                        opciones_filtro, 
-                        horizontal=True
+                    area_default_index = (
+                        opciones_filtro.index("MONTERREY 2")
+                        if "MONTERREY 2" in opciones_filtro else 0
+                    )
+
+                    area_seleccionada_com = st.sidebar.selectbox(
+                        "🔎 Área comercial:",
+                        opciones_filtro,
+                        index=area_default_index,
+                        key=f"tablero_area_com_{region_seleccionada}"
                     )
 
                     # --- NUEVO: SELECTOR DINÁMICO DE TIENDAS ---
@@ -1357,10 +1390,11 @@ def mostrar_tablero_bolsas():
                     else:
                         opciones_tiendas = sorted(df[df['AREA_CORREGIDA'] == area_seleccionada_com]['TIENDA'].dropna().unique().tolist())
 
-                    tiendas_seleccionadas = st.multiselect(
-                        "Selecciona la Tienda / CAT:",
+                    tiendas_seleccionadas = st.sidebar.multiselect(
+                        "🏪 Tienda / CAT:",
                         options=opciones_tiendas,
                         default=[]
+                        key=f"tablero_tiendas_{region_seleccionada}_{area_seleccionada_com}"
                     )
 
                     st.divider()
