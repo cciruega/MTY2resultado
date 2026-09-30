@@ -187,11 +187,18 @@ def generar_html_dashboard(df):
         line-height: 1;
     }
 
+    /* CIERRE DEL DÍA - CREMA */
+    .cierre .dato-valor {
+    background-color: #fce4d6;
+    padding: 4px 3px;
+    border-radius: 4px;
+    }
+
     /* Valores del arranque */
     .arranque .dato-valor {
-        background-color: #fce4d6;
-        padding: 4px 3px;
-        border-radius: 4px;
+    background-color: #d9ead3;
+    padding: 4px 3px;
+    border-radius: 4px;
     }
 
     /* Separación entre tablas */
