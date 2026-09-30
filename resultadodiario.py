@@ -165,7 +165,7 @@ def generar_html_dashboard(df):
 
     /* Celdas */
     .tabla-dashboard td {
-        border: 1px solid #d0d0d0;
+        border: 1px solid #47acff;
         padding: 4px 3px;
         text-align: center;
         vertical-align: middle;
