@@ -731,30 +731,22 @@ def mostrar_tablero_bolsas():
         display: none !important;
     }
 
-    /* 2. Ocultar barra de herramientas secundaria por seguridad */
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
-
-    /* 3. Ocultar pie de página (marca de agua de Streamlit) */
+    /* 2. Ocultar pie de página (marca de agua de Streamlit) */
     footer {
         display: none !important;
     }
 
-    /* 4. Ocultar el espacio en blanco que deja el encabezado al desaparecer */
+    /* 3. Ocultar el espacio en blanco que deja el encabezado al desaparecer */
     .stApp > header {
         background-color: transparent !important;
     }
     </style>
     """
     st.markdown(ocultar_iconos, unsafe_allow_html=True)
-    # ---------------------------------------------------------
 
     # ---------------------------------------------------------
     # 🎛️ FILTROS LATERALES DEL TABLERO
     # ---------------------------------------------------------
-    st.markdown("<h1 style='text-align: center;'>📊 Tablero Operativo - Bolsas</h1>", unsafe_allow_html=True)
-
     st.sidebar.header("🎛️ Filtros del Tablero Bolsas")
     st.sidebar.caption("Por defecto: Monterrey 2")
 
