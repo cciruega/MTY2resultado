@@ -737,6 +737,85 @@ def mostrar_reporte_telcel():
         # -------------------------------------------------------------------------
         st.subheader("📱 Reporte Telcel - MTY 2")
 
+    # Función para cargar el archivo sorteando las primeras filas vacías
+def cargar_datos(archivo):
+    df_temp = pd.read_excel(archivo, sheet_name="Detalle1", header=2)
+    if 'NOM_ESTRATEGIA' in df_temp.columns:
+        return df_temp
+    else:
+        return pd.read_excel(archivo, sheet_name="Detalle1")
+
+# ---------------------------------------------------------
+# ☁️ LÓGICA DE DETECCIÓN AUTOMÁTICA (CLARO DRIVE)
+# ---------------------------------------------------------
+@st.cache_data(ttl=600) # Cacheamos por 10 mins para no saturar ClaroDrive
+def obtener_archivo_clarodrive():
+    # Truco de ClaroDrive: Agregamos /download a tu liga para bajar la carpeta
+    url_carpeta = "https://i0000.clarodrive.com/s/FSXKpraaEE8owPZ"
+    url_descarga = url_carpeta.rstrip('/') + '/download'
+    
+    try:
+        respuesta = requests.get(url_descarga, timeout=15)
+        if respuesta.status_code == 200:
+            # Leemos el archivo ZIP directamente en la memoria del servidor
+            with zipfile.ZipFile(io.BytesIO(respuesta.content)) as archivo_zip:
+                # Buscamos todos los archivos Excel (ignorando los temporales que empiezan con ~)
+                excel_infos = [info for info in archivo_zip.infolist() if info.filename.endswith('.xlsx') and not info.filename.startswith('~')]
+                
+                if excel_infos:
+                    # Si hay varios, tomamos el más reciente por fecha de modificación
+                    excel_reciente = max(excel_infos, key=lambda x: x.date_time)
+                    
+                    # Lo extraemos a la memoria
+                    archivo_bytes = io.BytesIO(archivo_zip.read(excel_reciente.filename))
+                    
+                    # =========================================================
+                    # 🕒 AJUSTE DE ZONA HORARIA (UTC A CENTRO DE MÉXICO)
+                    # =========================================================
+                    fecha_tupla = excel_reciente.date_time 
+                    
+                    # 1. Convertimos la tupla del ZIP a un formato de fecha manipulable
+                    fecha_utc = datetime.datetime(
+                        year=fecha_tupla[0], month=fecha_tupla[1], day=fecha_tupla[2],
+                        hour=fecha_tupla[3], minute=fecha_tupla[4], second=fecha_tupla[5]
+                    )
+                    
+                    # 2. Le restamos 6 horas (Diferencia de México respecto a UTC)
+                    fecha_mexico = fecha_utc - datetime.timedelta(hours=6)
+                    
+                    # 3. Lo convertimos al texto final
+                    fecha_str = fecha_mexico.strftime('%d/%m/%Y %H:%M:%S')
+                    # =========================================================
+                    
+                    return archivo_bytes.getvalue(), excel_reciente.filename, fecha_str
+    except Exception:
+        pass # Si falla el internet del servidor o la liga, no rompe el programa
+    
+    return None, None, None
+
+# Obtenemos los bytes en lugar del objeto BytesIO para que Streamlit pueda cachear
+bytes_automatico, nombre_corto, fecha_actualizacion = obtener_archivo_clarodrive()
+archivo_a_procesar = None
+
+col1, col2 = st.columns([2, 1])
+with col1:
+    if bytes_automatico:
+        # Reconstruimos el BytesIO a partir de los bytes cacheados
+        archivo_automatico = io.BytesIO(bytes_automatico)
+        st.success(f"☁️ **Base de datos (Claro Drive):** {nombre_corto}  \n⏱️ **Actualizado:** {fecha_actualizacion}")
+        archivo_a_procesar = archivo_automatico
+    else:
+        st.warning("⚠️ No se pudo conectar con Claro Drive o la carpeta está vacía.")
+
+with col2:
+    # Si Claro Drive falla, habilitamos la subida manual como "Plan B"
+    usar_manual = st.checkbox("Subir archivo manualmente", value=False if bytes_automatico else True)
+
+if usar_manual:
+    archivo_a_procesar = st.file_uploader("Arrastra aquí tu archivo de Excel", type=['xlsx', 'xls'])
+
+st.divider()
+
         if archivo_a_procesar:
     try:
         df = cargar_datos(archivo_a_procesar)
