@@ -593,110 +593,440 @@ def mostrar_resultados_diarios():
 
 
 def mostrar_reporte_telcel():
-        # -------------------------------------------------------------------------
-        # CÓDIGO TELCEL INTEGRADO Y FILTRADO A MTY 2
-        # -------------------------------------------------------------------------
-        st.subheader("📱 Reporte Telcel - MTY 2")
 
-        bytes_automatico, nombre_corto, fecha_actualizacion = obtener_archivo_clarodrive_telcel()
-        archivo_a_procesar_telcel = None
+    st.subheader("📱 Reporte Telcel - Monterrey")
 
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if bytes_automatico:
-                archivo_automatico = io.BytesIO(bytes_automatico)
-                st.success(f"☁️ **Base de datos (Claro Drive):** {nombre_corto}  \n⏱️ **Actualizado:** {fecha_actualizacion}")
-                archivo_a_procesar_telcel = archivo_automatico
-            else:
-                st.warning("⚠️ No se pudo conectar con Claro Drive o la carpeta está vacía.")
+    # ============================================================
+    # DESCARGA AUTOMÁTICA
+    # ============================================================
 
-        with col2:
-            usar_manual = st.checkbox("Subir archivo manualmente", value=False if bytes_automatico else True)
+    bytes_automatico, nombre_corto, fecha_actualizacion = (
+        obtener_archivo_clarodrive_telcel()
+    )
 
-        if usar_manual:
-            archivo_a_procesar_telcel = st.file_uploader("Arrastra aquí tu archivo de Excel (Telcel)", type=['xlsx', 'xls'])
+    archivo_a_procesar_telcel = None
 
-        if archivo_a_procesar_telcel:
-            try:
-                df_telcel = cargar_datos_telcel(archivo_a_procesar_telcel)
+    col1, col2 = st.columns([2, 1])
 
-                st.sidebar.header("Filtros Telcel")
-                if 'MES_CAPTURA' in df_telcel.columns:
-                    df_telcel['MES_CAPTURA'] = pd.to_datetime(df_telcel['MES_CAPTURA'], errors='coerce')
-                    meses_disponibles = sorted(df_telcel['MES_CAPTURA'].dt.month.dropna().unique().astype(int).tolist())
-                    mes_actual = datetime.datetime.now().month
-                    default_index = meses_disponibles.index(mes_actual) if mes_actual in meses_disponibles else (len(meses_disponibles)-1 if meses_disponibles else 0)
+    with col1:
 
-                    mes_seleccionado = st.sidebar.selectbox("Mes de Captura (Número)", meses_disponibles, index=default_index)
-                    df_filtrado_t = df_telcel[df_telcel['MES_CAPTURA'].dt.month == mes_seleccionado]
-                else:
-                    df_filtrado_t = df_telcel
+        if bytes_automatico:
 
-                if 'NOM_ESTRATEGIA' in df_filtrado_t.columns:
-                    resumen_cacs = df_filtrado_t.groupby('NOM_ESTRATEGIA').size().reset_index(name='Avance Mes')
+            archivo_automatico = io.BytesIO(bytes_automatico)
 
-                    datos_area = []
-                    total_avance_mes = 0
-                    total_asesores = 0
-                    total_meta = 0
+            st.success(
+                f"☁️ **Base de datos (Claro Drive):** {nombre_corto}  \n"
+                f"⏱️ **Actualizado:** {fecha_actualizacion}"
+            )
 
-                    for cac in cacs_mty:
-                        avance_fila = resumen_cacs[resumen_cacs['NOM_ESTRATEGIA'] == cac]
-                        avance = avance_fila['Avance Mes'].values[0] if not avance_fila.empty else 0
+            archivo_a_procesar_telcel = archivo_automatico
 
-                        asesores = catalogo_asesores_mty2.get(cac, 0)
-                        meta = asesores * 2
-                        porcentaje = (avance / meta) if meta > 0 else 0
-                        nombre_mostrar = nombres_simples_mty2.get(cac, cac)
-
-                        datos_area.append({
-                            "Area/CAC": nombre_mostrar,
-                            "Avance Mes": avance,
-                            "Asesores": asesores,
-                            "Meta": meta,
-                            "Avance": porcentaje
-                        })
-                        total_avance_mes += avance
-                        total_asesores += asesores
-                        total_meta += meta
-
-                    total_porcentaje = (total_avance_mes / total_meta) if total_meta > 0 else 0
-
-                    datos_area.insert(0, {
-                        "Area/CAC": "[-] MONTERREY 2 (TOTAL)",
-                        "Avance Mes": total_avance_mes,
-                        "Asesores": total_asesores,
-                        "Meta": total_meta,
-                        "Avance": total_porcentaje
-                    })
-
-                    df_area = pd.DataFrame(datos_area)
-                    altura_tabla = (len(df_area) + 1) * 35 + 3
-
-                    st.dataframe(
-                        df_area.style.format({"Avance": "{:.0%}"}).map(colorear_semaforo, subset=['Avance']),
-                        width="content",  
-                        hide_index=True,
-                        height=altura_tabla,
-                        column_config={
-                            "Avance": st.column_config.ProgressColumn(
-                                "Avance", help="Cumplimiento de la meta", format="%.2f", min_value=0, max_value=1,
-                            )
-                        }
-                    )
-
-                    # Botón de descarga exclusivo para MTY
-                    df_detalle_area = df_filtrado_t[df_filtrado_t['NOM_ESTRATEGIA'].isin(cacs_mty)]
-                    generar_boton_descarga_telcel(df_detalle_area, "Detalle_MONTERREY_2", "btn_descarga_mty2")
-
-                else:
-                    st.error("La columna 'NOM_ESTRATEGIA' no se encontró.")
-
-            except Exception as e:
-                st.error(f"Error al procesar: {e}")
         else:
-            st.info("Esperando archivo de Telcel...")
 
+            st.warning(
+                "⚠️ No se pudo conectar con Claro Drive "
+                "o la carpeta está vacía."
+            )
+
+    with col2:
+
+        usar_manual = st.checkbox(
+            "Subir archivo manualmente",
+            value=False if bytes_automatico else True,
+            key="telcel_subir_manual"
+        )
+
+    if usar_manual:
+
+        archivo_a_procesar_telcel = st.file_uploader(
+            "Arrastra aquí tu archivo de Excel (Telcel)",
+            type=["xlsx", "xls"],
+            key="telcel_uploader"
+        )
+
+    # ============================================================
+    # SI NO HAY ARCHIVO
+    # ============================================================
+
+    if not archivo_a_procesar_telcel:
+
+        st.info("Esperando archivo de Telcel...")
+
+        return
+
+    # ============================================================
+    # CARGAR ARCHIVO
+    # ============================================================
+
+    try:
+
+        df_telcel = cargar_datos_telcel(
+            archivo_a_procesar_telcel
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"❌ Error al leer el archivo de Telcel: {e}"
+        )
+
+        return
+
+    # ============================================================
+    # LIMPIEZA BÁSICA
+    # ============================================================
+
+    df_telcel.columns = df_telcel.columns.str.strip()
+
+    if "NOM_ESTRATEGIA" not in df_telcel.columns:
+
+        st.error(
+            "❌ La columna 'NOM_ESTRATEGIA' "
+            "no existe en el archivo."
+        )
+
+        return
+
+    df_telcel["NOM_ESTRATEGIA"] = (
+        df_telcel["NOM_ESTRATEGIA"]
+        .astype(str)
+        .str.strip()
+    )
+
+    # ============================================================
+    # FILTROS LATERALES
+    # ============================================================
+
+    st.sidebar.divider()
+
+    st.sidebar.header("🎛️ Filtros Telcel")
+
+    # ============================================================
+    # FILTRO DE MES
+    # ============================================================
+
+    if "MES_CAPTURA" in df_telcel.columns:
+
+        df_telcel["MES_CAPTURA"] = pd.to_datetime(
+            df_telcel["MES_CAPTURA"],
+            errors="coerce"
+        )
+
+        meses_disponibles = sorted(
+            df_telcel["MES_CAPTURA"]
+            .dt.month
+            .dropna()
+            .unique()
+            .astype(int)
+            .tolist()
+        )
+
+        mes_actual = datetime.datetime.now().month
+
+        if mes_actual in meses_disponibles:
+
+            default_index = meses_disponibles.index(
+                mes_actual
+            )
+
+        else:
+
+            default_index = (
+                len(meses_disponibles) - 1
+                if meses_disponibles
+                else 0
+            )
+
+        if meses_disponibles:
+
+            mes_seleccionado = st.sidebar.selectbox(
+                "📅 Mes de Captura:",
+                meses_disponibles,
+                index=default_index,
+                key="telcel_mes"
+            )
+
+            df_filtrado_t = df_telcel[
+                df_telcel["MES_CAPTURA"].dt.month
+                == mes_seleccionado
+            ].copy()
+
+        else:
+
+            df_filtrado_t = df_telcel.copy()
+
+    else:
+
+        df_filtrado_t = df_telcel.copy()
+
+    # ============================================================
+    # FILTRO DE ÁREAS
+    # ============================================================
+
+    areas_telcel = [
+        "MONTERREY 1",
+        "MONTERREY 2",
+        "MONTERREY 3"
+    ]
+
+    areas_seleccionadas = st.sidebar.multiselect(
+        "🏢 Áreas a visualizar:",
+        options=areas_telcel,
+
+        # POR DEFECTO:
+        default=["MONTERREY 2"],
+
+        key="telcel_areas"
+    )
+
+    # ============================================================
+    # VALIDACIÓN
+    # ============================================================
+
+    if not areas_seleccionadas:
+
+        st.warning(
+            "⚠️ Selecciona al menos un área."
+        )
+
+        return
+
+    # ============================================================
+    # INFORMACIÓN DEL FILTRO
+    # ============================================================
+
+    st.caption(
+        "Filtros activos → "
+        f"Mes: {mes_seleccionado if 'mes_seleccionado' in locals() else 'Todos'} | "
+        f"Áreas: {', '.join(areas_seleccionadas)}"
+    )
+
+    # ============================================================
+    # FUNCIÓN PARA GENERAR TABLA DE CADA ÁREA
+    # ============================================================
+
+    def generar_tabla_area_telcel(area):
+
+        cacs_area = estructura_cac.get(
+            area,
+            []
+        )
+
+        if not cacs_area:
+
+            st.warning(
+                f"⚠️ No hay CAC configurados para {area}."
+            )
+
+            return
+
+        # --------------------------------------------------------
+        # FILTRAR SOLO CAC DEL ÁREA
+        # --------------------------------------------------------
+
+        df_area = df_filtrado_t[
+            df_filtrado_t["NOM_ESTRATEGIA"].isin(cacs_area)
+        ].copy()
+
+        # --------------------------------------------------------
+        # RESUMEN
+        # --------------------------------------------------------
+
+        resumen_cacs = (
+            df_area
+            .groupby("NOM_ESTRATEGIA")
+            .size()
+            .reset_index(name="Avance Mes")
+        )
+
+        datos_area = []
+
+        total_avance = 0
+        total_asesores = 0
+        total_meta = 0
+
+        # --------------------------------------------------------
+        # GENERAR CADA CAC
+        # --------------------------------------------------------
+
+        for cac in cacs_area:
+
+            avance_fila = resumen_cacs[
+                resumen_cacs["NOM_ESTRATEGIA"] == cac
+            ]
+
+            if not avance_fila.empty:
+
+                avance = int(
+                    avance_fila["Avance Mes"].iloc[0]
+                )
+
+            else:
+
+                avance = 0
+
+            asesores = catalogo_asesores_mty.get(
+                cac,
+                0
+            )
+
+            meta = asesores * 2
+
+            porcentaje = (
+                avance / meta
+                if meta > 0
+                else 0
+            )
+
+            nombre_mostrar = nombres_simples_mty.get(
+                cac,
+                cac
+            )
+
+            datos_area.append({
+
+                "Area/CAC":
+                    nombre_mostrar,
+
+                "Avance Mes":
+                    avance,
+
+                "Asesores":
+                    asesores,
+
+                "Meta":
+                    meta,
+
+                "Avance":
+                    porcentaje
+            })
+
+            total_avance += avance
+            total_asesores += asesores
+            total_meta += meta
+
+        # --------------------------------------------------------
+        # PORCENTAJE TOTAL DEL ÁREA
+        # --------------------------------------------------------
+
+        total_porcentaje = (
+            total_avance / total_meta
+            if total_meta > 0
+            else 0
+        )
+
+        # --------------------------------------------------------
+        # INSERTAR TOTAL AL PRINCIPIO
+        # --------------------------------------------------------
+
+        datos_area.insert(
+            0,
+            {
+                "Area/CAC":
+                    f"[-] {area} (TOTAL)",
+
+                "Avance Mes":
+                    total_avance,
+
+                "Asesores":
+                    total_asesores,
+
+                "Meta":
+                    total_meta,
+
+                "Avance":
+                    total_porcentaje
+            }
+        )
+
+        # --------------------------------------------------------
+        # DATAFRAME FINAL
+        # --------------------------------------------------------
+
+        df_area_final = pd.DataFrame(
+            datos_area
+        )
+
+        # --------------------------------------------------------
+        # TÍTULO DEL ÁREA
+        # --------------------------------------------------------
+
+        st.markdown("---")
+
+        st.subheader(
+            f"📊 {area}"
+        )
+
+        # --------------------------------------------------------
+        # TABLA
+        # --------------------------------------------------------
+
+        altura_tabla = (
+            (len(df_area_final) + 1) * 35 + 3
+        )
+
+        st.dataframe(
+
+            df_area_final.style
+            .format({
+                "Avance": "{:.0%}"
+            })
+            .map(
+                colorear_semaforo,
+                subset=["Avance"]
+            ),
+
+            width="content",
+
+            hide_index=True,
+
+            height=altura_tabla,
+
+            column_config={
+
+                "Avance": st.column_config.ProgressColumn(
+
+                    "Avance",
+
+                    help="Cumplimiento de la meta",
+
+                    format="%.2f",
+
+                    min_value=0,
+
+                    max_value=1
+                )
+            }
+        )
+
+        # --------------------------------------------------------
+        # DETALLE DE DESCARGA
+        # --------------------------------------------------------
+
+        df_detalle_area = df_filtrado_t[
+            df_filtrado_t["NOM_ESTRATEGIA"].isin(
+                cacs_area
+            )
+        ].copy()
+
+        generar_boton_descarga_telcel(
+
+            df_detalle_area,
+
+            f"Detalle_{area.replace(' ', '_')}",
+
+            f"btn_descarga_{area.replace(' ', '_').lower()}"
+        )
+
+    # ============================================================
+    # MOSTRAR ÁREAS SELECCIONADAS
+    # ============================================================
+
+    for area in areas_seleccionadas:
+
+        generar_tabla_area_telcel(
+            area
+        )
 
 
 def mostrar_tablero_bolsas():
