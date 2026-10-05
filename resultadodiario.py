@@ -80,7 +80,7 @@ def colorear_semaforo(val):
     if isinstance(val, str): return ''
     if val >= 0.80: color = '#28a745'
     elif val >= 0.50: color = '#ffc107'
-    else: color = '#3548dc'
+    else: color = '#dc3545'
     return f'color: {color}; font-weight: bold;'
 
 def generar_boton_descarga_telcel(df, nombre_archivo, btn_key):
@@ -2036,13 +2036,6 @@ def _detectar_columna_quejas(df, candidatos):
             return mapa[clave]
     return None
 
-def _altura_tabla_quejas(df, fila_px=34, encabezado_px=38, margen_px=8):
-    """
-    Calcula una altura compacta para st.dataframe
-    dependiendo del número real de filas.
-    """
-    filas = len(df)
-    return encabezado_px + (filas * fila_px) + margen_px
 
 def _leer_xlsx_quejas_desde_respuesta(contenido):
     """
@@ -2705,6 +2698,14 @@ def _mostrar_kpi_quejas(label, value):
     )
 
 
+def _altura_tabla_quejas(df, fila_px=30, encabezado_px=34, margen_px=4):
+    """
+    Calcula una altura compacta para st.dataframe según las filas reales.
+    Evita que Streamlit muestre filas vacías debajo de tablas pequeñas.
+    """
+    return encabezado_px + (len(df) * fila_px) + margen_px
+
+
 def _mostrar_resumen_general_quejas(df):
     st.markdown("### 📊 Resumen General")
 
@@ -2736,77 +2737,68 @@ def _mostrar_resumen_general_quejas(df):
     df_zonas = df[df["zona"].isin(zonas_operativas)].copy()
 
     # ============================================================
-# QUEJAS POR ZONA + DILACIÓN POR ZONA + TOP 5 COPE
-# TODAS EN LA MISMA FILA
-# ============================================================
-col_zona, col_dil, col_cope = st.columns(3)
+    # QUEJAS POR ZONA + DILACIÓN POR ZONA + TOP 5 COPE
+    # TODAS EN LA MISMA FILA
+    # ============================================================
+    col_zona, col_dil, col_cope = st.columns(3)
 
-# ============================================================
-# 1. QUEJAS POR ZONA
-# ============================================================
-with col_zona:
-    st.markdown("#### 📍 Quejas por Zona")
+    with col_zona:
+        st.markdown("#### 📍 Quejas por Zona")
 
-    zonas = (
-        df_zonas.groupby("zona")
-        .size()
-        .rename("FOLIOS")
-        .reindex(zonas_operativas, fill_value=0)
-        .reset_index()
-    )
-
-    st.dataframe(
-        _estilo_tabla_quejas(zonas),
-        hide_index=True,
-        width="content",
-        height=_altura_tabla_quejas(zonas),
-    )
-
-# ============================================================
-# 2. DILACIÓN POR ZONA
-# ============================================================
-with col_dil:
-    st.markdown("#### ⏳ Dilación por Zona")
-
-    dilacion_zona = (
-        df_zonas.groupby("zona")
-        .agg(
-            FOLIOS=("dilacion", "size"),
-            MAYOR_6=("dilacion", lambda s: int((s > 6).sum())),
-            MAYOR_10=("dilacion", lambda s: int((s > 10).sum())),
+        zonas = (
+            df_zonas.groupby("zona")
+            .size()
+            .rename("FOLIOS")
+            .reindex(zonas_operativas, fill_value=0)
+            .reset_index()
         )
-        .reindex(zonas_operativas, fill_value=0)
-        .reset_index()
-    )
 
-    st.dataframe(
-        _estilo_tabla_quejas(dilacion_zona),
-        hide_index=True,
-        width="content",
-        height=_altura_tabla_quejas(dilacion_zona),
-    )
+        st.dataframe(
+            _estilo_tabla_quejas(zonas),
+            hide_index=True,
+            width="content",
+            height=_altura_tabla_quejas(zonas),
+        )
 
-# ============================================================
-# 3. TOP 5 COPE
-# ============================================================
-with col_cope:
-    st.markdown("#### 🏆 Top 5 COPE")
+    with col_dil:
+        st.markdown("#### ⏳ Dilación por Zona")
 
-    top_copes = (
-        df.groupby("cope")
-        .size()
-        .sort_values(ascending=False)
-        .head(5)
-        .rename("FOLIOS")
-        .reset_index()
-    )
+        dilacion_zona = (
+            df_zonas.groupby("zona")
+            .agg(
+                FOLIOS=("dilacion", "size"),
+                MAYOR_6=("dilacion", lambda s: int((s > 6).sum())),
+                MAYOR_10=("dilacion", lambda s: int((s > 10).sum())),
+            )
+            .reindex(zonas_operativas, fill_value=0)
+            .reset_index()
+        )
 
-    st.dataframe(
-        _estilo_tabla_quejas(top_copes),
-        hide_index=True,
-        width="content",
-        height=_altura_tabla_quejas(top_copes),
-    )
+        st.dataframe(
+            _estilo_tabla_quejas(dilacion_zona),
+            hide_index=True,
+            width="content",
+            height=_altura_tabla_quejas(dilacion_zona),
+        )
+
+    with col_cope:
+        st.markdown("#### 🏆 Top 5 COPE")
+
+        top_copes = (
+            df.groupby("cope")
+            .size()
+            .sort_values(ascending=False)
+            .head(5)
+            .rename("FOLIOS")
+            .reset_index()
+        )
+
+        st.dataframe(
+            _estilo_tabla_quejas(top_copes),
+            hide_index=True,
+            width="content",
+            height=_altura_tabla_quejas(top_copes),
+        )
 
     # ============================================================
     # TOP 3 DISTRITOS POR ZONA
