@@ -2129,21 +2129,25 @@ def obtener_archivo_clarodrive_quejas():
 
 def _cargar_datos_quejas(archivo_bytes):
     """
-    Lee el XLSX buscando automáticamente la hoja que contenga las columnas
-    cope, distrito_co y alguna columna de dilación.
+    Lee el XLSX buscando automáticamente la hoja que contenga:
+      - cope
+      - distrito_co
+      - dilación
+      - zona (si existe)
 
-    Esto evita depender del nombre fijo de la hoja.
+    La tecnología se toma físicamente de la columna AQ del XLSX
+    (posición 43 de Excel / índice 42 de pandas), con respaldo por
+    nombre de columna si la estructura cambiara.
     """
     libro = pd.ExcelFile(io.BytesIO(archivo_bytes))
 
     mejor_df = None
     mejor_score = -1
     mejor_hoja = None
+    mejor_header = None
 
     for hoja in libro.sheet_names:
         try:
-            # Intentamos algunas posiciones de encabezado porque el XLSX
-            # podría traer títulos antes de la fila de encabezados.
             for header in [0, 1, 2, 3]:
                 try:
                     df_tmp = pd.read_excel(
@@ -2158,7 +2162,8 @@ def _cargar_datos_quejas(archivo_bytes):
                     continue
 
                 columnas_normalizadas = {
-                    _normalizar_columna_quejas(c): c for c in df_tmp.columns
+                    _normalizar_columna_quejas(c): c
+                    for c in df_tmp.columns
                 }
 
                 score = 0
@@ -2183,10 +2188,15 @@ def _cargar_datos_quejas(archivo_bytes):
                 if "ZONA" in columnas_normalizadas:
                     score += 1
 
+                # Damos un pequeño peso a que el archivo tenga al menos AQ.
+                if len(df_tmp.columns) >= 43:
+                    score += 1
+
                 if score > mejor_score:
                     mejor_score = score
                     mejor_df = df_tmp.copy()
                     mejor_hoja = hoja
+                    mejor_header = header
 
         except Exception:
             continue
@@ -2199,7 +2209,6 @@ def _cargar_datos_quejas(archivo_bytes):
 
     mejor_df.columns = [str(c).strip() for c in mejor_df.columns]
 
-    # Detectar columnas reales.
     col_cope = _detectar_columna_quejas(mejor_df, ["cope"])
     col_zona = _detectar_columna_quejas(mejor_df, ["zona"])
     col_distrito = _detectar_columna_quejas(mejor_df, ["distrito_co"])
@@ -2215,6 +2224,24 @@ def _cargar_datos_quejas(archivo_bytes):
         ],
     )
 
+    # La tecnología solicitada se encuentra en AQ.
+    # AQ = columna 43 de Excel = índice 42 en pandas.
+    col_tecnologia = None
+    if len(mejor_df.columns) > 42:
+        col_tecnologia = mejor_df.columns[42]
+
+    # Respaldo por nombre si, por alguna razón, AQ no existe.
+    if col_tecnologia is None:
+        col_tecnologia = _detectar_columna_quejas(
+            mejor_df,
+            [
+                "tecnologia",
+                "tecnología",
+                "tipo_tecnologia",
+                "tipo_tecnología",
+            ],
+        )
+
     if not col_cope or not col_distrito or not col_dilacion:
         raise ValueError(
             "Faltan columnas obligatorias. "
@@ -2222,8 +2249,6 @@ def _cargar_datos_quejas(archivo_bytes):
             f"DISTRITO_CO={col_distrito}, DILACION={col_dilacion}."
         )
 
-    # Renombrar internamente para que el resto del módulo sea independiente
-    # del nombre exacto de las columnas del XLSX.
     renombrar = {
         col_cope: "cope",
         col_distrito: "distrito_co",
@@ -2233,10 +2258,16 @@ def _cargar_datos_quejas(archivo_bytes):
     if col_zona:
         renombrar[col_zona] = "zona"
 
+    if col_tecnologia:
+        renombrar[col_tecnologia] = "tecnologia"
+
     df = mejor_df.rename(columns=renombrar).copy()
 
     if "zona" not in df.columns:
         df["zona"] = "SIN ZONA"
+
+    if "tecnologia" not in df.columns:
+        df["tecnologia"] = ""
 
     return df, mejor_hoja
 
@@ -2245,7 +2276,10 @@ def _normalizar_datos_quejas(df):
     """Limpieza y normalización básica de los campos utilizados en el visor."""
     df = df.copy()
 
-    for col in ["cope", "zona", "distrito_co"]:
+    for col in ["cope", "zona", "distrito_co", "tecnologia"]:
+        if col not in df.columns:
+            df[col] = ""
+
         df[col] = (
             df[col]
             .fillna("")
@@ -2255,23 +2289,57 @@ def _normalizar_datos_quejas(df):
         )
 
     df["cope"] = df["cope"].replace("", "SIN COPE")
-    df["zona"] = df["zona"].replace("", "SIN ZONA")
     df["distrito_co"] = df["distrito_co"].replace("", "")
 
-    # Equivalencia usada en tu análisis de WhatsApp.
-    df["zona"] = df["zona"].replace({
-        "LA FE": "LA FE - ESTADIO",
-        "ESTADIO": "LA FE - ESTADIO",
-    })
+    # Normalización de zonas para el filtro del portal.
+    # LA FE y ESTADIO se muestran como una sola zona: LA FE-ESTADIO.
+    def normalizar_zona(zona):
+        z = str(zona).strip().upper()
+        z = re.sub(r"\s+", " ", z)
 
-    # Normalizar dilación como entero.
+        equivalencias = {
+            "ANAHUAC": "ANAHUAC",
+            "ANÁHUAC": "ANAHUAC",
+            "ESCOBEDO": "ESCOBEDO",
+            "LA FE": "LA FE-ESTADIO",
+            "ESTADIO": "LA FE-ESTADIO",
+            "LA FE - ESTADIO": "LA FE-ESTADIO",
+            "LA FE-ESTADIO": "LA FE-ESTADIO",
+            "LA FE / ESTADIO": "LA FE-ESTADIO",
+            "LA FE ESTADIO": "LA FE-ESTADIO",
+        }
+
+        if z in equivalencias:
+            return equivalencias[z]
+
+        return z if z else "SIN ZONA"
+
+    df["zona"] = df["zona"].map(normalizar_zona)
+
+    # Dilación numérica.
     df["dilacion"] = pd.to_numeric(
         df["dilacion"],
         errors="coerce"
     ).fillna(0)
 
-    # Evitar decimales accidentales.
     df["dilacion"] = df["dilacion"].round().astype(int)
+
+    # Tecnología:
+    # GPON = Fibra
+    # Cualquier otro concepto, incluyendo blancos = Cobre.
+    df["tecnologia"] = (
+        df["tecnologia"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    df["TECNOLOGIA_GRUPO"] = np.where(
+        df["tecnologia"].eq("GPON"),
+        "Fibra",
+        "Cobre",
+    )
 
     return df
 
@@ -2327,23 +2395,80 @@ def _asignar_tienda_quejas(df):
     return df
 
 
+def _aplicar_filtros_quejas(
+    df,
+    zonas_seleccionadas,
+    copes_seleccionados,
+    dilaciones_seleccionadas,
+    tecnologias_seleccionadas,
+):
+    """Aplica todos los filtros laterales al universo operativo."""
+    df_filtrado = df.copy()
+
+    if zonas_seleccionadas:
+        df_filtrado = df_filtrado[
+            df_filtrado["zona"].isin(zonas_seleccionadas)
+        ].copy()
+
+    if copes_seleccionados:
+        df_filtrado = df_filtrado[
+            df_filtrado["cope"].isin(copes_seleccionados)
+        ].copy()
+
+    if tecnologias_seleccionadas:
+        df_filtrado = df_filtrado[
+            df_filtrado["TECNOLOGIA_GRUPO"].isin(
+                tecnologias_seleccionadas
+            )
+        ].copy()
+
+    # "Todas" ignora las demás opciones. Si se eligen varios umbrales,
+    # se aplica la condición OR. Al ser umbrales acumulativos, escoger
+    # el menor seleccionado equivale al universo más amplio.
+    if dilaciones_seleccionadas and "Todas" not in dilaciones_seleccionadas:
+        condiciones = []
+
+        if "≥ 3 días" in dilaciones_seleccionadas:
+            condiciones.append(df_filtrado["dilacion"] >= 3)
+
+        if "≥ 6 días" in dilaciones_seleccionadas:
+            condiciones.append(df_filtrado["dilacion"] >= 6)
+
+        if "≥ 9 días" in dilaciones_seleccionadas:
+            condiciones.append(df_filtrado["dilacion"] >= 9)
+
+        if "> 10 días" in dilaciones_seleccionadas:
+            condiciones.append(df_filtrado["dilacion"] > 10)
+
+        if condiciones:
+            mascara = condiciones[0]
+            for condicion in condiciones[1:]:
+                mascara = mascara | condicion
+
+            df_filtrado = df_filtrado[mascara].copy()
+
+    return df_filtrado
+
+
+# Compatibilidad con cualquier referencia anterior.
 def _aplicar_filtro_dilacion_quejas(df, filtro):
     if filtro == "Todas":
         return df.copy()
 
-    if filtro == "≥ 3 días":
-        return df[df["dilacion"] >= 3].copy()
+    mapa = {
+        "≥ 3 días": ["≥ 3 días"],
+        "≥ 6 días": ["≥ 6 días"],
+        "≥ 9 días": ["≥ 9 días"],
+        "> 10 días": ["> 10 días"],
+    }
 
-    if filtro == "≥ 6 días":
-        return df[df["dilacion"] >= 6].copy()
-
-    if filtro == "≥ 9 días":
-        return df[df["dilacion"] >= 9].copy()
-
-    if filtro == "> 10 días":
-        return df[df["dilacion"] > 10].copy()
-
-    return df.copy()
+    return _aplicar_filtros_quejas(
+        df,
+        zonas_seleccionadas=[],
+        copes_seleccionados=[],
+        dilaciones_seleccionadas=mapa.get(filtro, ["Todas"]),
+        tecnologias_seleccionadas=[],
+    )
 
 
 def _estilo_tabla_quejas(df):
@@ -2424,123 +2549,89 @@ def _tabla_resumen_dilacion_quejas(df, dimension):
 def _tabla_dilacion_exacta_quejas(df, dimension):
     """
     Tabla 2:
-      DIMENSION | 0 | 1 | 2 | ... | TOTAL | % DEL TOTAL | % ACUMULADO
+      DIMENSION | 0 | 1 | 2 | ... | TOTAL
+      TOTAL     | ...               | TOTAL
+      % DEL TOTAL| ...              | 100.0%
+
+    Los conteos se calculan con crosstab sobre el número de registros.
+    El % DEL TOTAL de cada día es:
+        total de folios de ese día / total general de folios.
     """
     if df.empty:
         return pd.DataFrame()
 
-    # Pivot por día exacto.
-    pivot = pd.pivot_table(
-        df,
-        index=dimension,
-        columns="dilacion",
-        values=df.index.name if df.index.name else df.columns[0],
-        aggfunc="count",
-        fill_value=0,
+    trabajo = df[[dimension, "dilacion"]].copy()
+
+    trabajo[dimension] = (
+        trabajo[dimension]
+        .fillna("SIN DATO")
+        .astype(str)
+        .str.strip()
+        .replace("", "SIN DATO")
     )
 
-    # Recalcular de forma segura usando tamaño de filas.
-    pivot = (
-        df.assign(_uno=1)
-        .pivot_table(
-            index=dimension,
-            columns="dilacion",
-            values="_uno",
-            aggfunc="sum",
-            fill_value=0,
-        )
-    )
+    trabajo["dilacion"] = pd.to_numeric(
+        trabajo["dilacion"],
+        errors="coerce"
+    ).fillna(0).round().astype(int)
 
-    # Orden natural de los días.
-    pivot = pivot.reindex(sorted(pivot.columns), axis=1)
+    dias = sorted(trabajo["dilacion"].unique().tolist())
+
+    pivot = pd.crosstab(
+        trabajo[dimension],
+        trabajo["dilacion"],
+        dropna=False,
+    ).reindex(
+        columns=dias,
+        fill_value=0
+    )
 
     pivot["TOTAL"] = pivot.sum(axis=1)
 
+    # Entidades ordenadas por backlog.
+    pivot = pivot.sort_values(
+        by="TOTAL",
+        ascending=False
+    )
+
     total_general = int(pivot["TOTAL"].sum())
 
-    # Ordenar entidades por mayor backlog.
-    pivot = pivot.sort_values("TOTAL", ascending=False)
+    # Fila TOTAL con conteos.
+    fila_total = pivot.sum(axis=0).astype(int)
 
-    # Total general.
-    fila_total = pivot.sum(axis=0)
-    fila_total.name = "TOTAL"
+    # Construimos la salida como objetos para poder mostrar
+    # simultáneamente conteos enteros y porcentajes como texto.
+    resultado = pivot.astype(int).astype(object)
 
-    resultado = pd.concat(
-        [pivot, fila_total.to_frame().T],
-        axis=0
+    # Fila TOTAL al final de los conteos.
+    resultado.loc["TOTAL"] = fila_total
+
+    # % DEL TOTAL: total del día / total general de folios.
+    fila_pct = {}
+
+    for col in dias:
+        valor = int(fila_total[col])
+        pct = (valor / total_general) if total_general else 0
+        fila_pct[col] = f"{pct:.1%}"
+
+    fila_pct["TOTAL"] = "100.0%"
+
+    resultado.loc["% DEL TOTAL"] = pd.Series(fila_pct)
+
+    # Convertir columna de índice en columna visible.
+    resultado = resultado.reset_index()
+    resultado = resultado.rename(
+        columns={
+            dimension: dimension.upper()
+        }
     )
 
-    # % del total por día, basado en la fila TOTAL.
-    porcentajes = {}
-
-    for col in pivot.columns:
-        if col == "TOTAL":
-            continue
-
-        denominador = total_general
-        porcentajes[col] = (
-            float(fila_total[col]) / denominador
-            if denominador
-            else 0
-        )
-
-    fila_pct = {
-        col: porcentajes.get(col, "")
-        for col in resultado.columns
-    }
-    fila_pct["TOTAL"] = 1.0
-    fila_pct = pd.Series(
-        fila_pct,
-        name="% DEL TOTAL"
-    )
-
-    acumulado = {}
-    acum = 0.0
-
-    for col in sorted(
-        [c for c in resultado.columns if c != "TOTAL"],
-        key=lambda x: int(x)
-    ):
-        acum += porcentajes.get(col, 0)
-        acumulado[col] = acum
-
-    fila_acum = {
-        col: acumulado.get(col, "")
-        for col in resultado.columns
-    }
-    fila_acum["TOTAL"] = 1.0
-    fila_acum = pd.Series(
-        fila_acum,
-        name="% ACUMULADO"
-    )
-
-    resultado = pd.concat(
-        [
-            resultado,
-            fila_pct.to_frame().T,
-            fila_acum.to_frame().T,
-        ],
-        axis=0,
-    )
-
-    # Convertir nombres numéricos a enteros visuales.
-    renombres = {}
-    for col in resultado.columns:
-        if col != "TOTAL":
-            try:
-                renombres[col] = int(col)
-            except Exception:
-                pass
-
-    resultado = resultado.rename(columns=renombres)
-
-    # Ordenar columnas: días, TOTAL, porcentajes.
-    columnas_dia = sorted(
-        [c for c in resultado.columns if isinstance(c, (int, np.integer))]
-    )
+    # Orden de columnas.
+    columnas_dia = [int(c) for c in dias]
+    columnas_dia_reales = [c for c in resultado.columns if c in columnas_dia]
 
     return resultado[
-        columnas_dia + ["TOTAL"]
+        [dimension.upper()] + columnas_dia_reales + ["TOTAL"]
     ]
 
 
@@ -2614,7 +2705,9 @@ def _mostrar_resumen_general_quejas(df):
     dil6 = int((df["dilacion"] > 6).sum())
     dil10 = int((df["dilacion"] > 10).sum())
 
-    # KPIs.
+    # ============================================================
+    # KPIs
+    # ============================================================
     k1, k2, k3 = st.columns(3)
 
     with k1:
@@ -2626,25 +2719,58 @@ def _mostrar_resumen_general_quejas(df):
     with k3:
         _mostrar_kpi_quejas("> 10 DÍAS", f"{dil10:,}")
 
-    # ============================================================
-    # TOTAL DE FOLIOS POR ZONA
-    # ============================================================
-    st.markdown("#### 📍 Quejas por Zona")
+    # Solo mostramos las tres zonas operativas solicitadas.
+    zonas_operativas = [
+        "ANAHUAC",
+        "ESCOBEDO",
+        "LA FE-ESTADIO",
+    ]
 
-    zonas = (
-        df.groupby("zona")
-        .size()
-        .sort_values(ascending=False)
-        .rename("FOLIOS")
-        .reset_index()
-    )
+    df_zonas = df[df["zona"].isin(zonas_operativas)].copy()
 
-    st.dataframe(
-        _estilo_tabla_quejas(zonas),
-        hide_index=True,
-        width="stretch",
-        height=min(300, 45 + len(zonas) * 36),
-    )
+    # ============================================================
+    # QUEJAS POR ZONA + DILACIÓN POR ZONA, JUNTAS
+    # ============================================================
+    col_zona, col_dil = st.columns(2)
+
+    with col_zona:
+        st.markdown("#### 📍 Quejas por Zona")
+
+        zonas = (
+            df_zonas.groupby("zona")
+            .size()
+            .rename("FOLIOS")
+            .reindex(zonas_operativas, fill_value=0)
+            .reset_index()
+        )
+
+        st.dataframe(
+            _estilo_tabla_quejas(zonas),
+            hide_index=True,
+            width="content",
+            height=190,
+        )
+
+    with col_dil:
+        st.markdown("#### ⏳ Dilación por Zona")
+
+        dilacion_zona = (
+            df_zonas.groupby("zona")
+            .agg(
+                FOLIOS=("dilacion", "size"),
+                MAYOR_6=("dilacion", lambda s: int((s > 6).sum())),
+                MAYOR_10=("dilacion", lambda s: int((s > 10).sum())),
+            )
+            .reindex(zonas_operativas, fill_value=0)
+            .reset_index()
+        )
+
+        st.dataframe(
+            _estilo_tabla_quejas(dilacion_zona),
+            hide_index=True,
+            width="content",
+            height=190,
+        )
 
     # ============================================================
     # TOP 5 COPE
@@ -2663,31 +2789,8 @@ def _mostrar_resumen_general_quejas(df):
     st.dataframe(
         _estilo_tabla_quejas(top_copes),
         hide_index=True,
-        width="stretch",
-        height=min(260, 45 + len(top_copes) * 36),
-    )
-
-    # ============================================================
-    # DILACIÓN >6 / >10 POR ZONA
-    # ============================================================
-    st.markdown("#### ⏳ Dilación por Zona")
-
-    dilacion_zona = (
-        df.groupby("zona")
-        .agg(
-            FOLIOS=("dilacion", "size"),
-            MAYOR_6=("dilacion", lambda s: int((s > 6).sum())),
-            MAYOR_10=("dilacion", lambda s: int((s > 10).sum())),
-        )
-        .sort_values("FOLIOS", ascending=False)
-        .reset_index()
-    )
-
-    st.dataframe(
-        _estilo_tabla_quejas(dilacion_zona),
-        hide_index=True,
-        width="stretch",
-        height=min(300, 45 + len(dilacion_zona) * 36),
+        width="content",
+        height=220,
     )
 
     # ============================================================
@@ -2695,40 +2798,39 @@ def _mostrar_resumen_general_quejas(df):
     # ============================================================
     st.markdown("#### 🗺️ Top 3 Distritos por Zona")
 
-    zonas_disponibles = sorted(
-        [z for z in df["zona"].dropna().unique().tolist() if str(z).strip()]
-    )
+    columnas_zonas = st.columns(3)
 
-    if not zonas_disponibles:
-        st.info("No hay zonas disponibles para mostrar.")
-        return
+    for col, zona in zip(columnas_zonas, zonas_operativas):
+        with col:
+            st.markdown(f"**{zona}**")
 
-    for zona in zonas_disponibles:
-        sub = df[df["zona"] == zona]
+            sub = df_zonas[df_zonas["zona"] == zona].copy()
 
-        top3 = (
-            sub.groupby("distrito_co")
-            .size()
-            .sort_values(ascending=False)
-            .head(3)
-            .rename("FOLIOS")
-            .reset_index()
-        )
+            if sub.empty:
+                st.info("Sin folios")
+                continue
 
-        # Mostrar blancos de manera explícita.
-        top3["distrito_co"] = top3["distrito_co"].replace(
-            "",
-            "SIN DISTRITO"
-        )
+            top3 = (
+                sub.groupby("distrito_co")
+                .size()
+                .sort_values(ascending=False)
+                .head(3)
+                .rename("FOLIOS")
+                .reset_index()
+            )
 
-        st.markdown(f"**{zona}**")
+            top3["distrito_co"] = (
+                top3["distrito_co"]
+                .replace("", "SIN DISTRITO")
+                .fillna("SIN DISTRITO")
+            )
 
-        st.dataframe(
-            _estilo_tabla_quejas(top3),
-            hide_index=True,
-            width="stretch",
-            height=min(190, 45 + len(top3) * 36),
-        )
+            st.dataframe(
+                _estilo_tabla_quejas(top3),
+                hide_index=True,
+                width="content",
+                height=170,
+            )
 
 
 def mostrar_reporte_quejas():
@@ -2813,7 +2915,7 @@ def mostrar_reporte_quejas():
     )
 
     # ============================================================
-    # RESUMEN GENERAL — SIEMPRE SOBRE TODA LA BASE
+    # RESUMEN GENERAL — BASE COMPLETA
     # ============================================================
     _mostrar_resumen_general_quejas(df_quejas)
 
@@ -2827,41 +2929,116 @@ def mostrar_reporte_quejas():
     st.sidebar.divider()
     st.sidebar.header("🎛️ Filtros Reporte de Quejas")
 
-    vista_quejas = st.sidebar.radio(
-        "Vista:",
+    # ------------------------------------------------------------
+    # DIMENSIÓN DE LAS TABLAS
+    # ------------------------------------------------------------
+    dimension_seleccionada = st.sidebar.selectbox(
+        "Agrupar tablas por:",
         options=["COPE", "ZONA", "TIENDA"],
         index=2,
-        key="quejas_vista",
+        key="quejas_dimension",
     )
 
-    filtro_dilacion = st.sidebar.radio(
-        "Dilación:",
-        options=[
-            "Todas",
-            "≥ 3 días",
-            "≥ 6 días",
-            "≥ 9 días",
-            "> 10 días",
-        ],
-        index=0,
-        key="quejas_filtro_dilacion",
+    # ------------------------------------------------------------
+    # FILTRO ZONA — MULTISELECCIÓN
+    # ------------------------------------------------------------
+    zonas_opciones = [
+        "ANAHUAC",
+        "ESCOBEDO",
+        "LA FE-ESTADIO",
+    ]
+
+    # Las tres opciones siempre permanecen visibles, aunque alguna
+    # temporalmente no tenga registros en el archivo.
+    zonas_disponibles = zonas_opciones.copy()
+
+    zonas_seleccionadas = st.sidebar.multiselect(
+        "📍 Zona:",
+        options=zonas_disponibles,
+        default=zonas_disponibles,
+        key="quejas_zonas",
     )
 
-    df_detalle = _aplicar_filtro_dilacion_quejas(
+    # ------------------------------------------------------------
+    # FILTRO COPE — MULTISELECCIÓN
+    # ------------------------------------------------------------
+    copes_disponibles = sorted(
+        [
+            str(x)
+            for x in df_quejas["cope"]
+            .dropna()
+            .unique()
+            .tolist()
+            if str(x).strip()
+        ]
+    )
+
+    copes_seleccionados = st.sidebar.multiselect(
+        "🏢 COPE:",
+        options=copes_disponibles,
+        default=copes_disponibles,
+        key="quejas_copes",
+    )
+
+    # ------------------------------------------------------------
+    # FILTRO DILACIÓN — MULTISELECCIÓN
+    # ------------------------------------------------------------
+    opciones_dilacion = [
+        "Todas",
+        "≥ 3 días",
+        "≥ 6 días",
+        "≥ 9 días",
+        "> 10 días",
+    ]
+
+    dilaciones_seleccionadas = st.sidebar.multiselect(
+        "⏳ Dilación:",
+        options=opciones_dilacion,
+        default=["Todas"],
+        key="quejas_dilaciones",
+    )
+
+    # ------------------------------------------------------------
+    # FILTRO TECNOLOGÍA — MULTISELECCIÓN
+    # ------------------------------------------------------------
+    tecnologias_seleccionadas = st.sidebar.multiselect(
+        "🌐 Tecnología:",
+        options=["Fibra", "Cobre"],
+        default=["Fibra", "Cobre"],
+        help="Fibra = GPON. Cobre = cualquier otro concepto, incluyendo blancos.",
+        key="quejas_tecnologia",
+    )
+
+    # ------------------------------------------------------------
+    # APLICAR FILTROS
+    # ------------------------------------------------------------
+    df_detalle = _aplicar_filtros_quejas(
         df_quejas,
-        filtro_dilacion,
+        zonas_seleccionadas=zonas_seleccionadas,
+        copes_seleccionados=copes_seleccionados,
+        dilaciones_seleccionadas=dilaciones_seleccionadas,
+        tecnologias_seleccionadas=tecnologias_seleccionadas,
+    )
+
+    filtro_dilacion_texto = (
+        ", ".join(dilaciones_seleccionadas)
+        if dilaciones_seleccionadas
+        else "Todas"
     )
 
     st.info(
-        f"Vista seleccionada: **{vista_quejas}** | "
-        f"Filtro de dilación: **{filtro_dilacion}** | "
-        f"Folios considerados: **{len(df_detalle):,}**"
+        f"Filtros activos → "
+        f"**Zonas:** {', '.join(zonas_seleccionadas) if zonas_seleccionadas else 'Ninguna'} | "
+        f"**COPE:** {len(copes_seleccionados):,} seleccionados | "
+        f"**Dilación:** {filtro_dilacion_texto} | "
+        f"**Tecnología:** {', '.join(tecnologias_seleccionadas) if tecnologias_seleccionadas else 'Ninguna'} | "
+        f"**Folios considerados:** {len(df_detalle):,}"
     )
 
-    if vista_quejas == "COPE":
+    if dimension_seleccionada == "COPE":
         dimension = "cope"
         nombre_dimension = "COPE"
-    elif vista_quejas == "ZONA":
+    elif dimension_seleccionada == "ZONA":
         dimension = "zona"
         nombre_dimension = "ZONA"
     else:
@@ -2871,24 +3048,31 @@ def mostrar_reporte_quejas():
     # ============================================================
     # TABLA 1
     # ============================================================
-    st.markdown("#### 1️⃣ Backlog por entidad y rango de dilación")
+    st.markdown(
+        f"#### 1️⃣ Backlog por {nombre_dimension} y rango de dilación"
+    )
 
     tabla1 = _tabla_resumen_dilacion_quejas(
         df_detalle,
         dimension,
     )
 
-    st.dataframe(
-        _estilo_tabla_quejas(tabla1),
-        hide_index=True,
-        width="stretch",
-        height=min(430, 45 + len(tabla1) * 34),
-    )
+    if tabla1.empty:
+        st.info("No hay datos para el backlog con los filtros seleccionados.")
+    else:
+        st.dataframe(
+            _estilo_tabla_quejas(tabla1),
+            hide_index=True,
+            width="content",
+            height=min(430, 55 + len(tabla1) * 34),
+        )
 
     # ============================================================
     # TABLA 2
     # ============================================================
-    st.markdown("#### 2️⃣ Distribución exacta por días de dilación")
+    st.markdown(
+        f"#### 2️⃣ Distribución exacta por días de dilación — {nombre_dimension}"
+    )
 
     tabla2 = _tabla_dilacion_exacta_quejas(
         df_detalle,
@@ -2898,37 +3082,24 @@ def mostrar_reporte_quejas():
     if tabla2.empty:
         st.info("No hay datos para la distribución de dilación.")
     else:
-        # Dar formato porcentual a las dos últimas filas.
         st.dataframe(
-            tabla2,
-            width="stretch",
-            height=min(520, 80 + len(tabla2.index) * 34),
-            column_config={
-                **{
-                    c: st.column_config.NumberColumn(
-                        str(c),
-                        format="%,.0f" if False else "0"
-                    )
-                    for c in tabla2.columns
-                    if c not in ["TOTAL"]
-                    and c not in ["TOTAL"]
-                },
-                "TOTAL": st.column_config.NumberColumn(
-                    "TOTAL",
-                    format="0"
-                ),
-            },
+            _estilo_tabla_quejas(tabla2),
+            hide_index=True,
+            width="content",
+            height=min(520, 90 + len(tabla2.index) * 34),
         )
 
         st.caption(
-            "Las dos últimas filas representan el % del total y el % acumulado "
-            "por día de dilación."
+            "En la fila **% DEL TOTAL**, cada día representa el total de folios "
+            "de ese día dividido entre el total general de folios."
         )
 
     # ============================================================
     # TABLA 3
     # ============================================================
-    st.markdown("#### 3️⃣ Quejas por Distrito")
+    st.markdown(
+        f"#### 3️⃣ Quejas por Distrito — {nombre_dimension}"
+    )
 
     tabla3 = _tabla_distritos_quejas(
         df_detalle,
@@ -2940,8 +3111,9 @@ def mostrar_reporte_quejas():
     else:
         st.dataframe(
             _estilo_tabla_quejas(tabla3),
-            width="stretch",
-            height=min(650, 80 + len(tabla3.index) * 30),
+            hide_index=False,
+            width="content",
+            height=min(650, 90 + len(tabla3.index) * 30),
         )
 
     # ============================================================
