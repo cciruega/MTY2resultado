@@ -2753,11 +2753,8 @@ def _mostrar_resumen_general_quejas(df):
             .reset_index()
         )
 
-        st.dataframe(
-            _estilo_tabla_quejas(zonas),
-            hide_index=True,
-            width="content",
-            height=_altura_tabla_quejas(zonas),
+        st.table(
+            _estilo_tabla_quejas(zonas)
         )
 
     with col_dil:
@@ -2774,11 +2771,8 @@ def _mostrar_resumen_general_quejas(df):
             .reset_index()
         )
 
-        st.dataframe(
-            _estilo_tabla_quejas(dilacion_zona),
-            hide_index=True,
-            width="content",
-            height=_altura_tabla_quejas(dilacion_zona),
+        st.table(
+            _estilo_tabla_quejas(dilacion_zona)
         )
 
     with col_cope:
@@ -2793,11 +2787,8 @@ def _mostrar_resumen_general_quejas(df):
             .reset_index()
         )
 
-        st.dataframe(
-            _estilo_tabla_quejas(top_copes),
-            hide_index=True,
-            width="content",
-            height=_altura_tabla_quejas(top_copes),
+        st.table(
+            _estilo_tabla_quejas(top_copes)
         )
 
     # ============================================================
