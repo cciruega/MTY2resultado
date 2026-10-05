@@ -150,8 +150,8 @@ st.title("Monterrey (Seguimiento y Reportes)")
 
 seleccion = option_menu(
     menu_title=None, 
-    options=["Resultados Diarios", "Reporte Telcel", "Tablero Bolsas"],
-    icons=["bar-chart-line", "phone", "briefcase"], 
+    options=["Resultados Diarios", "Reporte Telcel", "Tablero Bolsas", "Reporte Quejas"],
+    icons=["bar-chart-line", "phone", "briefcase", "exclamation-diamond"], 
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
@@ -1970,8 +1970,1019 @@ def mostrar_tablero_bolsas():
         #
 
 
+
 # ============================================================
-# 5. RUTEO PRINCIPAL
+# 4. REPORTE DE QUEJAS
+# ============================================================
+
+# Nota:
+# - Se integra como una nueva vista del portal existente.
+# - Fuente: XLSX de Claro Drive.
+# - Se toma el archivo XLSX más reciente del enlace compartido.
+# - El detalle utiliza COPE, ZONA, TIENDA y distrito_co.
+# - La columna de dilación se detecta por nombre y se normaliza a "dilacion".
+
+PREFIJOS_TIENDA_QUEJAS = {
+    # GPE
+    "GPE": "GPE", "JOY": "GPE", "LFQ": "GPE", "ORQ": "GPE",
+    "ACE": "GPE", "CEX": "GPE", "ONO": "GPE",
+
+    # LAS
+    "DRS": "LAS", "EVO": "LAS", "JDS": "LAS", "LAS": "LAS",
+    "MSF": "LAS", "SCZ": "LAS", "UPI": "LAS",
+
+    # PUN
+    "ANA": "PUN", "EAS": "PUN", "SWW": "PUN",
+
+    # GES
+    "95L": "GES", "AHF": "GES", "BDA": "GES", "BES": "GES",
+    "CPI": "GES", "CTB": "GES", "EBD": "GES", "GES": "GES",
+    "LOP": "GES", "LYX": "GES", "PFS": "GES", "PPU": "GES",
+    "PSL": "GES", "PUF": "GES", "PVN": "GES", "PXZ": "GES",
+    "VEP": "GES",
+
+    # SFE
+    "BLN": "SFE", "CRB": "SFE", "IDV": "SFE", "NSM": "SFE",
+    "RMS": "SFE", "SFE": "SFE", "SRF": "SFE", "VSD": "SFE",
+    "VSQ": "SFE", "ZOZ": "SFE",
+}
+
+COPE_DIRECTO_TIENDA_QUEJAS = {
+    "CTSCA": "SCA",
+    "CTPUN": "PUN",
+}
+
+COPE_SIMPLE_TIENDA_QUEJAS = {
+    "CTUND": "GES",
+    "CTSFE": "SFE",
+    "CTLAS": "LAS",
+}
+
+
+def _normalizar_columna_quejas(nombre):
+    """Normaliza nombres para localizar columnas aunque cambie mayúsculas/espacios."""
+    nombre = str(nombre).strip().upper()
+    nombre = re.sub(r"\s+", "_", nombre)
+    nombre = re.sub(r"[^A-Z0-9_]", "", nombre)
+    return nombre
+
+
+def _detectar_columna_quejas(df, candidatos):
+    """Devuelve el nombre real de la primera columna que coincida con candidatos."""
+    mapa = {_normalizar_columna_quejas(c): c for c in df.columns}
+    for candidato in candidatos:
+        clave = _normalizar_columna_quejas(candidato)
+        if clave in mapa:
+            return mapa[clave]
+    return None
+
+
+def _leer_xlsx_quejas_desde_respuesta(contenido):
+    """
+    Claro Drive puede devolver:
+      1) un XLSX directamente, o
+      2) un ZIP con varios XLSX.
+    En ZIP se toma el XLSX con fecha de modificación más reciente.
+    """
+    # Intentar como ZIP
+    try:
+        with zipfile.ZipFile(io.BytesIO(contenido)) as archivo_zip:
+            excel_infos = [
+                info for info in archivo_zip.infolist()
+                if info.filename.lower().endswith((".xlsx", ".xls"))
+                and not info.filename.startswith("~")
+                and not info.is_dir()
+            ]
+
+            if excel_infos:
+                excel_reciente = max(excel_infos, key=lambda x: x.date_time)
+                datos_excel = archivo_zip.read(excel_reciente.filename)
+
+                fecha_tupla = excel_reciente.date_time
+                fecha_archivo = datetime.datetime(
+                    year=fecha_tupla[0],
+                    month=fecha_tupla[1],
+                    day=fecha_tupla[2],
+                    hour=fecha_tupla[3],
+                    minute=fecha_tupla[4],
+                    second=fecha_tupla[5],
+                )
+
+                # La fecha del ZIP normalmente viene sin zona.
+                # Se conserva el ajuste utilizado en tu portal actual.
+                fecha_mexico = fecha_archivo - datetime.timedelta(hours=6)
+
+                return (
+                    datos_excel,
+                    excel_reciente.filename,
+                    fecha_mexico.strftime("%d/%m/%Y %H:%M:%S"),
+                )
+    except zipfile.BadZipFile:
+        pass
+
+    # Si no era ZIP, tratarlo como Excel directo.
+    return contenido, "Archivo_Quejas.xlsx", datetime.datetime.now().strftime(
+        "%d/%m/%Y %H:%M:%S"
+    )
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def obtener_archivo_clarodrive_quejas():
+    """
+    Descarga la carpeta compartida de Claro Drive y devuelve el XLSX más reciente.
+
+    También permite configurar una URL directa al XLSX mediante:
+    st.secrets["CLARO_DRIVE_QUEJAS_DOWNLOAD_URL"]
+
+    En caso de no existir ese secreto, utiliza la liga compartida indicada
+    para el reporte de quejas.
+    """
+    url_carpeta = "https://i0000.clarodrive.com/s/iZ5Qtm6aQAwyWkn"
+
+    # Opción preferente si en Secrets ya se configuró una URL directa.
+    try:
+        url_directa = st.secrets.get("CLARO_DRIVE_QUEJAS_DOWNLOAD_URL", "")
+    except Exception:
+        url_directa = ""
+
+    url = url_directa.strip() if str(url_directa).strip() else (
+        url_carpeta.rstrip("/") + "/download"
+    )
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/154.0.0.0 Safari/537.36"
+        )
+    }
+
+    try:
+        respuesta = requests.get(url, headers=headers, timeout=30)
+        respuesta.raise_for_status()
+
+        return _leer_xlsx_quejas_desde_respuesta(respuesta.content)
+
+    except Exception as e:
+        return None, None, None
+
+
+def _cargar_datos_quejas(archivo_bytes):
+    """
+    Lee el XLSX buscando automáticamente la hoja que contenga las columnas
+    cope, distrito_co y alguna columna de dilación.
+
+    Esto evita depender del nombre fijo de la hoja.
+    """
+    libro = pd.ExcelFile(io.BytesIO(archivo_bytes))
+
+    mejor_df = None
+    mejor_score = -1
+    mejor_hoja = None
+
+    for hoja in libro.sheet_names:
+        try:
+            # Intentamos algunas posiciones de encabezado porque el XLSX
+            # podría traer títulos antes de la fila de encabezados.
+            for header in [0, 1, 2, 3]:
+                try:
+                    df_tmp = pd.read_excel(
+                        libro,
+                        sheet_name=hoja,
+                        header=header
+                    )
+                except Exception:
+                    continue
+
+                if df_tmp.empty:
+                    continue
+
+                columnas_normalizadas = {
+                    _normalizar_columna_quejas(c): c for c in df_tmp.columns
+                }
+
+                score = 0
+
+                if "COPE" in columnas_normalizadas:
+                    score += 3
+
+                if "DISTRITO_CO" in columnas_normalizadas:
+                    score += 3
+
+                for cand in [
+                    "DILACION",
+                    "DILACION_DIAS",
+                    "DILACION_DIA",
+                    "DIL6",
+                    "DIL",
+                ]:
+                    if _normalizar_columna_quejas(cand) in columnas_normalizadas:
+                        score += 4
+                        break
+
+                if "ZONA" in columnas_normalizadas:
+                    score += 1
+
+                if score > mejor_score:
+                    mejor_score = score
+                    mejor_df = df_tmp.copy()
+                    mejor_hoja = hoja
+
+        except Exception:
+            continue
+
+    if mejor_df is None or mejor_score < 7:
+        raise ValueError(
+            "No se encontró una hoja con la estructura esperada "
+            "(cope, distrito_co y dilación)."
+        )
+
+    mejor_df.columns = [str(c).strip() for c in mejor_df.columns]
+
+    # Detectar columnas reales.
+    col_cope = _detectar_columna_quejas(mejor_df, ["cope"])
+    col_zona = _detectar_columna_quejas(mejor_df, ["zona"])
+    col_distrito = _detectar_columna_quejas(mejor_df, ["distrito_co"])
+
+    col_dilacion = _detectar_columna_quejas(
+        mejor_df,
+        [
+            "dilacion",
+            "dilacion_dias",
+            "dilacion_dia",
+            "dil6",
+            "dil",
+        ],
+    )
+
+    if not col_cope or not col_distrito or not col_dilacion:
+        raise ValueError(
+            "Faltan columnas obligatorias. "
+            f"Detectadas: COPE={col_cope}, ZONA={col_zona}, "
+            f"DISTRITO_CO={col_distrito}, DILACION={col_dilacion}."
+        )
+
+    # Renombrar internamente para que el resto del módulo sea independiente
+    # del nombre exacto de las columnas del XLSX.
+    renombrar = {
+        col_cope: "cope",
+        col_distrito: "distrito_co",
+        col_dilacion: "dilacion",
+    }
+
+    if col_zona:
+        renombrar[col_zona] = "zona"
+
+    df = mejor_df.rename(columns=renombrar).copy()
+
+    if "zona" not in df.columns:
+        df["zona"] = "SIN ZONA"
+
+    return df, mejor_hoja
+
+
+def _normalizar_datos_quejas(df):
+    """Limpieza y normalización básica de los campos utilizados en el visor."""
+    df = df.copy()
+
+    for col in ["cope", "zona", "distrito_co"]:
+        df[col] = (
+            df[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+    df["cope"] = df["cope"].replace("", "SIN COPE")
+    df["zona"] = df["zona"].replace("", "SIN ZONA")
+    df["distrito_co"] = df["distrito_co"].replace("", "")
+
+    # Equivalencia usada en tu análisis de WhatsApp.
+    df["zona"] = df["zona"].replace({
+        "LA FE": "LA FE - ESTADIO",
+        "ESTADIO": "LA FE - ESTADIO",
+    })
+
+    # Normalizar dilación como entero.
+    df["dilacion"] = pd.to_numeric(
+        df["dilacion"],
+        errors="coerce"
+    ).fillna(0)
+
+    # Evitar decimales accidentales.
+    df["dilacion"] = df["dilacion"].round().astype(int)
+
+    return df
+
+
+def _asignar_tienda_quejas(df):
+    """
+    Regla exacta acordada:
+      Nivel 1:
+        CTSCA -> SCA
+        CTPUN -> PUN
+
+      Nivel 2:
+        CTUND / CTSFE / CTLAS -> prefijo de distrito_co
+
+      Nivel 3:
+        Si distrito_co está vacío o el prefijo no existe:
+          CTUND -> GES
+          CTSFE -> SFE
+          CTLAS -> LAS
+
+      Caso no clasificable:
+        SIN ASIGNAR
+    """
+    df = df.copy()
+
+    def resolver(row):
+        cope = str(row["cope"]).strip().upper()
+        distrito = str(row["distrito_co"]).strip().upper()
+
+        # Nivel 1: asociaciones directas.
+        if cope in COPE_DIRECTO_TIENDA_QUEJAS:
+            return COPE_DIRECTO_TIENDA_QUEJAS[cope]
+
+        # Nivel 2 + 3: COPE especial.
+        if cope in COPE_SIMPLE_TIENDA_QUEJAS or cope in {
+            "CTUND", "CTSFE", "CTLAS"
+        }:
+            prefijo = distrito[:3] if distrito else ""
+
+            if prefijo in PREFIJOS_TIENDA_QUEJAS:
+                return PREFIJOS_TIENDA_QUEJAS[prefijo]
+
+            return COPE_SIMPLE_TIENDA_QUEJAS.get(
+                cope,
+                "SIN ASIGNAR"
+            )
+
+        # Cualquier otro COPE no definido.
+        return "SIN ASIGNAR"
+
+    df["TIENDA"] = df.apply(resolver, axis=1)
+
+    return df
+
+
+def _aplicar_filtro_dilacion_quejas(df, filtro):
+    if filtro == "Todas":
+        return df.copy()
+
+    if filtro == "≥ 3 días":
+        return df[df["dilacion"] >= 3].copy()
+
+    if filtro == "≥ 6 días":
+        return df[df["dilacion"] >= 6].copy()
+
+    if filtro == "≥ 9 días":
+        return df[df["dilacion"] >= 9].copy()
+
+    if filtro == "> 10 días":
+        return df[df["dilacion"] > 10].copy()
+
+    return df.copy()
+
+
+def _estilo_tabla_quejas(df):
+    """
+    Estilo compacto para mantener el portal visualmente limpio.
+    """
+    return (
+        df.style
+        .format(na_rep="")
+        .set_properties(**{
+            "text-align": "center",
+            "font-size": "12px",
+            "padding": "3px 6px",
+        })
+        .set_table_styles([
+            {
+                "selector": "th",
+                "props": [
+                    ("background-color", "#1f4e78"),
+                    ("color", "white"),
+                    ("font-weight", "bold"),
+                    ("text-align", "center"),
+                    ("font-size", "12px"),
+                    ("padding", "4px 6px"),
+                ],
+            },
+            {
+                "selector": "tbody tr:nth-child(even)",
+                "props": [
+                    ("background-color", "#f7f9fb"),
+                ],
+            },
+        ])
+    )
+
+
+def _tabla_resumen_dilacion_quejas(df, dimension):
+    """
+    Tabla 1:
+      DIMENSION | TOTAL | >=3 | >=6 | >=9 | >10
+
+    Se ordena siempre por TOTAL descendente.
+    """
+    datos = []
+
+    for entidad, grupo in df.groupby(dimension, dropna=False):
+        datos.append({
+            dimension.upper(): entidad,
+            "TOTAL": len(grupo),
+            ">=3": int((grupo["dilacion"] >= 3).sum()),
+            ">=6": int((grupo["dilacion"] >= 6).sum()),
+            ">=9": int((grupo["dilacion"] >= 9).sum()),
+            ">10": int((grupo["dilacion"] > 10).sum()),
+        })
+
+    resultado = pd.DataFrame(datos)
+
+    if resultado.empty:
+        return pd.DataFrame(
+            columns=[
+                dimension.upper(),
+                "TOTAL",
+                ">=3",
+                ">=6",
+                ">=9",
+                ">10",
+            ]
+        )
+
+    resultado = resultado.sort_values(
+        by="TOTAL",
+        ascending=False
+    ).reset_index(drop=True)
+
+    return resultado
+
+
+def _tabla_dilacion_exacta_quejas(df, dimension):
+    """
+    Tabla 2:
+      DIMENSION | 0 | 1 | 2 | ... | TOTAL | % DEL TOTAL | % ACUMULADO
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    # Pivot por día exacto.
+    pivot = pd.pivot_table(
+        df,
+        index=dimension,
+        columns="dilacion",
+        values=df.index.name if df.index.name else df.columns[0],
+        aggfunc="count",
+        fill_value=0,
+    )
+
+    # Recalcular de forma segura usando tamaño de filas.
+    pivot = (
+        df.assign(_uno=1)
+        .pivot_table(
+            index=dimension,
+            columns="dilacion",
+            values="_uno",
+            aggfunc="sum",
+            fill_value=0,
+        )
+    )
+
+    # Orden natural de los días.
+    pivot = pivot.reindex(sorted(pivot.columns), axis=1)
+
+    pivot["TOTAL"] = pivot.sum(axis=1)
+
+    total_general = int(pivot["TOTAL"].sum())
+
+    # Ordenar entidades por mayor backlog.
+    pivot = pivot.sort_values("TOTAL", ascending=False)
+
+    # Total general.
+    fila_total = pivot.sum(axis=0)
+    fila_total.name = "TOTAL"
+
+    resultado = pd.concat(
+        [pivot, fila_total.to_frame().T],
+        axis=0
+    )
+
+    # % del total por día, basado en la fila TOTAL.
+    porcentajes = {}
+
+    for col in pivot.columns:
+        if col == "TOTAL":
+            continue
+
+        denominador = total_general
+        porcentajes[col] = (
+            float(fila_total[col]) / denominador
+            if denominador
+            else 0
+        )
+
+    fila_pct = {
+        col: porcentajes.get(col, "")
+        for col in resultado.columns
+    }
+    fila_pct["TOTAL"] = 1.0
+    fila_pct = pd.Series(
+        fila_pct,
+        name="% DEL TOTAL"
+    )
+
+    acumulado = {}
+    acum = 0.0
+
+    for col in sorted(
+        [c for c in resultado.columns if c != "TOTAL"],
+        key=lambda x: int(x)
+    ):
+        acum += porcentajes.get(col, 0)
+        acumulado[col] = acum
+
+    fila_acum = {
+        col: acumulado.get(col, "")
+        for col in resultado.columns
+    }
+    fila_acum["TOTAL"] = 1.0
+    fila_acum = pd.Series(
+        fila_acum,
+        name="% ACUMULADO"
+    )
+
+    resultado = pd.concat(
+        [
+            resultado,
+            fila_pct.to_frame().T,
+            fila_acum.to_frame().T,
+        ],
+        axis=0,
+    )
+
+    # Convertir nombres numéricos a enteros visuales.
+    renombres = {}
+    for col in resultado.columns:
+        if col != "TOTAL":
+            try:
+                renombres[col] = int(col)
+            except Exception:
+                pass
+
+    resultado = resultado.rename(columns=renombres)
+
+    # Ordenar columnas: días, TOTAL, porcentajes.
+    columnas_dia = sorted(
+        [c for c in resultado.columns if isinstance(c, (int, np.integer))]
+    )
+
+    return resultado[
+        columnas_dia + ["TOTAL"]
+    ]
+
+
+def _tabla_distritos_quejas(df, dimension):
+    """
+    Tabla 3:
+      DISTRITO_CO | entidades... | TOTAL
+
+    Las columnas son COPE, ZONA o TIENDA según la vista.
+    Las filas se ordenan por TOTAL descendente.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    pivot = pd.pivot_table(
+        df,
+        index="distrito_co",
+        columns=dimension,
+        values="dilacion",
+        aggfunc="count",
+        fill_value=0,
+    )
+
+    pivot["TOTAL"] = pivot.sum(axis=1)
+
+    pivot = pivot.sort_values(
+        by="TOTAL",
+        ascending=False
+    )
+
+    # Asegurar que distrito vacío sea identificable.
+    pivot.index = pivot.index.map(
+        lambda x: "SIN DISTRITO" if str(x).strip() == "" else x
+    )
+
+    return pivot
+
+
+def _mostrar_kpi_quejas(label, value):
+    st.markdown(
+        f"""
+        <div style="
+            border:1px solid #d9e2f3;
+            border-radius:8px;
+            padding:10px 12px;
+            background:#f8fbff;
+            text-align:center;
+            min-height:80px;
+        ">
+            <div style="
+                font-size:12px;
+                color:#5b6573;
+                font-weight:600;
+                margin-bottom:5px;
+            ">{escape(str(label))}</div>
+            <div style="
+                font-size:27px;
+                font-weight:700;
+                color:#1f4e78;
+            ">{escape(str(value))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _mostrar_resumen_general_quejas(df):
+    st.markdown("### 📊 Resumen General")
+
+    total = len(df)
+    dil6 = int((df["dilacion"] > 6).sum())
+    dil10 = int((df["dilacion"] > 10).sum())
+
+    # KPIs.
+    k1, k2, k3 = st.columns(3)
+
+    with k1:
+        _mostrar_kpi_quejas("TOTAL FOLIOS", f"{total:,}")
+
+    with k2:
+        _mostrar_kpi_quejas("> 6 DÍAS", f"{dil6:,}")
+
+    with k3:
+        _mostrar_kpi_quejas("> 10 DÍAS", f"{dil10:,}")
+
+    # ============================================================
+    # TOTAL DE FOLIOS POR ZONA
+    # ============================================================
+    st.markdown("#### 📍 Quejas por Zona")
+
+    zonas = (
+        df.groupby("zona")
+        .size()
+        .sort_values(ascending=False)
+        .rename("FOLIOS")
+        .reset_index()
+    )
+
+    st.dataframe(
+        _estilo_tabla_quejas(zonas),
+        hide_index=True,
+        width="stretch",
+        height=min(300, 45 + len(zonas) * 36),
+    )
+
+    # ============================================================
+    # TOP 5 COPE
+    # ============================================================
+    st.markdown("#### 🏆 Top 5 COPE")
+
+    top_copes = (
+        df.groupby("cope")
+        .size()
+        .sort_values(ascending=False)
+        .head(5)
+        .rename("FOLIOS")
+        .reset_index()
+    )
+
+    st.dataframe(
+        _estilo_tabla_quejas(top_copes),
+        hide_index=True,
+        width="stretch",
+        height=min(260, 45 + len(top_copes) * 36),
+    )
+
+    # ============================================================
+    # DILACIÓN >6 / >10 POR ZONA
+    # ============================================================
+    st.markdown("#### ⏳ Dilación por Zona")
+
+    dilacion_zona = (
+        df.groupby("zona")
+        .agg(
+            FOLIOS=("dilacion", "size"),
+            MAYOR_6=("dilacion", lambda s: int((s > 6).sum())),
+            MAYOR_10=("dilacion", lambda s: int((s > 10).sum())),
+        )
+        .sort_values("FOLIOS", ascending=False)
+        .reset_index()
+    )
+
+    st.dataframe(
+        _estilo_tabla_quejas(dilacion_zona),
+        hide_index=True,
+        width="stretch",
+        height=min(300, 45 + len(dilacion_zona) * 36),
+    )
+
+    # ============================================================
+    # TOP 3 DISTRITOS POR ZONA
+    # ============================================================
+    st.markdown("#### 🗺️ Top 3 Distritos por Zona")
+
+    zonas_disponibles = sorted(
+        [z for z in df["zona"].dropna().unique().tolist() if str(z).strip()]
+    )
+
+    if not zonas_disponibles:
+        st.info("No hay zonas disponibles para mostrar.")
+        return
+
+    for zona in zonas_disponibles:
+        sub = df[df["zona"] == zona]
+
+        top3 = (
+            sub.groupby("distrito_co")
+            .size()
+            .sort_values(ascending=False)
+            .head(3)
+            .rename("FOLIOS")
+            .reset_index()
+        )
+
+        # Mostrar blancos de manera explícita.
+        top3["distrito_co"] = top3["distrito_co"].replace(
+            "",
+            "SIN DISTRITO"
+        )
+
+        st.markdown(f"**{zona}**")
+
+        st.dataframe(
+            _estilo_tabla_quejas(top3),
+            hide_index=True,
+            width="stretch",
+            height=min(190, 45 + len(top3) * 36),
+        )
+
+
+def mostrar_reporte_quejas():
+    st.subheader("📊 Reporte de Quejas MTY 2")
+
+    # ============================================================
+    # CARGA AUTOMÁTICA
+    # ============================================================
+    (
+        bytes_automatico,
+        nombre_archivo,
+        fecha_actualizacion,
+    ) = obtener_archivo_clarodrive_quejas()
+
+    archivo_a_procesar = None
+
+    c1, c2 = st.columns([3, 1])
+
+    with c1:
+        if bytes_automatico:
+            archivo_a_procesar = io.BytesIO(bytes_automatico)
+
+            st.success(
+                f"☁️ **Base de datos (Claro Drive):** {nombre_archivo}  \n"
+                f"⏱️ **Actualizado:** {fecha_actualizacion}"
+            )
+        else:
+            st.warning(
+                "⚠️ No se pudo conectar con Claro Drive o no se encontró "
+                "un XLSX en la carpeta compartida."
+            )
+
+    with c2:
+        usar_manual = st.checkbox(
+            "Subir archivo manualmente",
+            value=False if bytes_automatico else True,
+            key="quejas_subir_manual",
+        )
+
+    if usar_manual:
+        archivo_a_procesar = st.file_uploader(
+            "Arrastra aquí el archivo XLSX de Quejas",
+            type=["xlsx", "xls"],
+            key="quejas_uploader",
+        )
+
+    if archivo_a_procesar is None:
+        st.info("Esperando archivo de Quejas...")
+        return
+
+    # ============================================================
+    # PROCESAMIENTO
+    # ============================================================
+    with st.spinner("⏳ Procesando reporte de quejas..."):
+        try:
+            if hasattr(archivo_a_procesar, "getvalue"):
+                archivo_bytes = archivo_a_procesar.getvalue()
+            else:
+                archivo_bytes = bytes(archivo_a_procesar)
+
+            df_quejas, hoja_utilizada = _cargar_datos_quejas(
+                archivo_bytes
+            )
+
+            df_quejas = _normalizar_datos_quejas(
+                df_quejas
+            )
+
+            df_quejas = _asignar_tienda_quejas(
+                df_quejas
+            )
+
+        except Exception as e:
+            st.error(
+                f"❌ Error al procesar el archivo de Quejas: {e}"
+            )
+            return
+
+    st.caption(
+        f"Hoja utilizada: **{hoja_utilizada}** | "
+        f"Registros: **{len(df_quejas):,}**"
+    )
+
+    # ============================================================
+    # RESUMEN GENERAL — SIEMPRE SOBRE TODA LA BASE
+    # ============================================================
+    _mostrar_resumen_general_quejas(df_quejas)
+
+    st.divider()
+
+    # ============================================================
+    # DETALLE OPERATIVO
+    # ============================================================
+    st.markdown("### 🎛️ Detalle Operativo")
+
+    st.sidebar.divider()
+    st.sidebar.header("🎛️ Filtros Reporte de Quejas")
+
+    vista_quejas = st.sidebar.radio(
+        "Vista:",
+        options=["COPE", "ZONA", "TIENDA"],
+        index=2,
+        key="quejas_vista",
+    )
+
+    filtro_dilacion = st.sidebar.radio(
+        "Dilación:",
+        options=[
+            "Todas",
+            "≥ 3 días",
+            "≥ 6 días",
+            "≥ 9 días",
+            "> 10 días",
+        ],
+        index=0,
+        key="quejas_filtro_dilacion",
+    )
+
+    df_detalle = _aplicar_filtro_dilacion_quejas(
+        df_quejas,
+        filtro_dilacion,
+    )
+
+    st.info(
+        f"Vista seleccionada: **{vista_quejas}** | "
+        f"Filtro de dilación: **{filtro_dilacion}** | "
+        f"Folios considerados: **{len(df_detalle):,}**"
+    )
+
+    if vista_quejas == "COPE":
+        dimension = "cope"
+        nombre_dimension = "COPE"
+    elif vista_quejas == "ZONA":
+        dimension = "zona"
+        nombre_dimension = "ZONA"
+    else:
+        dimension = "TIENDA"
+        nombre_dimension = "TIENDA"
+
+    # ============================================================
+    # TABLA 1
+    # ============================================================
+    st.markdown("#### 1️⃣ Backlog por entidad y rango de dilación")
+
+    tabla1 = _tabla_resumen_dilacion_quejas(
+        df_detalle,
+        dimension,
+    )
+
+    st.dataframe(
+        _estilo_tabla_quejas(tabla1),
+        hide_index=True,
+        width="stretch",
+        height=min(430, 45 + len(tabla1) * 34),
+    )
+
+    # ============================================================
+    # TABLA 2
+    # ============================================================
+    st.markdown("#### 2️⃣ Distribución exacta por días de dilación")
+
+    tabla2 = _tabla_dilacion_exacta_quejas(
+        df_detalle,
+        dimension,
+    )
+
+    if tabla2.empty:
+        st.info("No hay datos para la distribución de dilación.")
+    else:
+        # Dar formato porcentual a las dos últimas filas.
+        st.dataframe(
+            tabla2,
+            width="stretch",
+            height=min(520, 80 + len(tabla2.index) * 34),
+            column_config={
+                **{
+                    c: st.column_config.NumberColumn(
+                        str(c),
+                        format="%,.0f" if False else "0"
+                    )
+                    for c in tabla2.columns
+                    if c not in ["TOTAL"]
+                    and c not in ["TOTAL"]
+                },
+                "TOTAL": st.column_config.NumberColumn(
+                    "TOTAL",
+                    format="0"
+                ),
+            },
+        )
+
+        st.caption(
+            "Las dos últimas filas representan el % del total y el % acumulado "
+            "por día de dilación."
+        )
+
+    # ============================================================
+    # TABLA 3
+    # ============================================================
+    st.markdown("#### 3️⃣ Quejas por Distrito")
+
+    tabla3 = _tabla_distritos_quejas(
+        df_detalle,
+        dimension,
+    )
+
+    if tabla3.empty:
+        st.info("No hay datos para la matriz de quejas por distrito.")
+    else:
+        st.dataframe(
+            _estilo_tabla_quejas(tabla3),
+            width="stretch",
+            height=min(650, 80 + len(tabla3.index) * 30),
+        )
+
+    # ============================================================
+    # DESCARGA DEL UNIVERSO FILTRADO
+    # ============================================================
+    st.markdown("#### 📥 Descargar detalle filtrado")
+
+    df_descarga = df_detalle.copy()
+
+    st.download_button(
+        label="📥 Descargar Excel del detalle filtrado",
+        data=_crear_excel_quejas(df_descarga),
+        file_name="Reporte_Quejas_Detalle.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        key="quejas_descarga_excel",
+    )
+
+
+def _crear_excel_quejas(df):
+    """Crea un XLSX en memoria con el detalle filtrado."""
+    output = io.BytesIO()
+
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl"
+    ) as writer:
+        df.to_excel(
+            writer,
+            index=False,
+            sheet_name="Quejas"
+        )
+
+    output.seek(0)
+    return output.getvalue()
+
+
+# ============================================================
+# 6. RUTEO PRINCIPAL
 # ============================================================
 
 if seleccion == "Resultados Diarios":
@@ -1982,3 +2993,6 @@ elif seleccion == "Reporte Telcel":
 
 elif seleccion == "Tablero Bolsas":
     mostrar_tablero_bolsas()
+
+elif seleccion == "Reporte Quejas":
+    mostrar_reporte_quejas()
