@@ -2699,11 +2699,16 @@ def _mostrar_kpi_quejas(label, value):
 
 
 def _mostrar_resumen_general_quejas(df):
-    st.markdown("### 📊 Resumen General")
+    ...
+    zonas_operativas = [
+        "ANAHUAC",
+        "ESCOBEDO",
+        "LA FE-ESTADIO",
+    ]
 
-    total = len(df)
-    dil6 = int((df["dilacion"] > 6).sum())
-    dil10 = int((df["dilacion"] > 10).sum())
+    df_zonas = df[df["zona"].isin(zonas_operativas)].copy()
+
+    col_zona, col_dil, col_cope = st.columns(3)
 
     # ============================================================
     # KPIs
