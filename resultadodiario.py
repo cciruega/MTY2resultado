@@ -80,7 +80,7 @@ def colorear_semaforo(val):
     if isinstance(val, str): return ''
     if val >= 0.80: color = '#28a745'
     elif val >= 0.50: color = '#ffc107'
-    else: color = '#dc3545'
+    else: color = '#3548dc'
     return f'color: {color}; font-weight: bold;'
 
 def generar_boton_descarga_telcel(df, nombre_archivo, btn_key):
@@ -2036,6 +2036,13 @@ def _detectar_columna_quejas(df, candidatos):
             return mapa[clave]
     return None
 
+def _altura_tabla_quejas(df, fila_px=34, encabezado_px=38, margen_px=8):
+    """
+    Calcula una altura compacta para st.dataframe
+    dependiendo del número real de filas.
+    """
+    filas = len(df)
+    return encabezado_px + (filas * fila_px) + margen_px
 
 def _leer_xlsx_quejas_desde_respuesta(contenido):
     """
