@@ -2731,7 +2731,7 @@ def _mostrar_resumen_general_quejas(df):
     # ============================================================
     # QUEJAS POR ZONA + DILACIÓN POR ZONA, JUNTAS
     # ============================================================
-    col_zona, col_dil = st.columns(3)
+    col_zona, col_dil = st.columns(2)
 
     with col_zona:
         st.markdown("#### 📍 Quejas por Zona")
