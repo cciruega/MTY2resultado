@@ -3122,6 +3122,7 @@ def mostrar_reporte_quejas():
     if tabla3.empty:
         st.info("No hay datos para la matriz de quejas por distrito.")
     else:
+        tabla3_mostrar = tabla3.head(10)
         html_tabla3 = _estilo_tabla_quejas(
             tabla3,
             ocultar_indice=False
@@ -3130,13 +3131,18 @@ def mostrar_reporte_quejas():
         contenedor_html = f"""
         <div style="
             width: 100%;
-            max-height: 600px;
+            max-width: 100%;
             overflow-x: auto;
             overflow-y: auto;
             border: 1px solid #ddd;
             border-radius: 6px;
         ">
-            {html_tabla3}
+            <div style="
+                width: max-content;
+                min-width: 100%;
+            ">
+                {html_tabla3}
+            </div>
         </div>
         """
 
