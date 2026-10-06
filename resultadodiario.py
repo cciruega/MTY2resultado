@@ -3132,6 +3132,7 @@ def mostrar_reporte_quejas():
         <div style="
             width: 100%;
             max-width: 100%;
+            max-height: 450px;
             overflow-x: auto;
             overflow-y: auto;
             border: 1px solid #ddd;
