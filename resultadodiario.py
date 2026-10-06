@@ -2471,17 +2471,18 @@ def _aplicar_filtro_dilacion_quejas(df, filtro):
     )
 
 
-def _estilo_tabla_quejas(df):
+def _estilo_tabla_quejas(df, ocultar_indice=True):
     """
-    Estilo compacto para mantener el portal visualmente limpio.
+    Estilo compacto para mantener el portal visualmente limpio y ajustado al contenido.
     """
-    return (
+    styler = (
         df.style
         .format(na_rep="")
         .set_properties(**{
             "text-align": "center",
             "font-size": "12px",
             "padding": "3px 6px",
+            "white-space": "nowrap" # Evita que el texto salte de línea
         })
         .set_table_styles([
             {
@@ -2493,6 +2494,7 @@ def _estilo_tabla_quejas(df):
                     ("text-align", "center"),
                     ("font-size", "12px"),
                     ("padding", "4px 6px"),
+                    ("white-space", "nowrap")
                 ],
             },
             {
@@ -2501,9 +2503,21 @@ def _estilo_tabla_quejas(df):
                     ("background-color", "#f7f9fb"),
                 ],
             },
+            {
+                "selector": "table",
+                "props": [
+                    ("width", "max-content"), # Ajusta la tabla al texto
+                    ("margin-bottom", "15px")
+                ]
+            }
         ])
     )
-
+    
+    # Ocultar el índice si es necesario
+    if ocultar_indice:
+        styler = styler.hide(axis="index")
+        
+    return styler
 
 def _tabla_resumen_dilacion_quejas(df, dimension):
     """
@@ -3058,12 +3072,7 @@ def mostrar_reporte_quejas():
     if tabla1.empty:
         st.info("No hay datos para el backlog con los filtros seleccionados.")
     else:
-        st.dataframe(
-            _estilo_tabla_quejas(tabla1),
-            hide_index=True,
-            width="content",
-            height=min(430, 55 + len(tabla1) * 34),
-        )
+        st.markdown(_estilo_tabla_quejas(tabla1).to_html(), unsafe_allow_html=True)
 
     # ============================================================
     # TABLA 2
@@ -3080,12 +3089,7 @@ def mostrar_reporte_quejas():
     if tabla2.empty:
         st.info("No hay datos para la distribución de dilación.")
     else:
-        st.dataframe(
-            _estilo_tabla_quejas(tabla2),
-            hide_index=True,
-            width="content",
-            height=min(520, 90 + len(tabla2.index) * 34),
-        )
+        st.markdown(_estilo_tabla_quejas(tabla2).to_html(), unsafe_allow_html=True)
 
         st.caption(
             "En la fila **% DEL TOTAL**, cada día representa el total de folios "
@@ -3107,12 +3111,7 @@ def mostrar_reporte_quejas():
     if tabla3.empty:
         st.info("No hay datos para la matriz de quejas por distrito.")
     else:
-        st.dataframe(
-            _estilo_tabla_quejas(tabla3),
-            hide_index=False,
-            width="content",
-            height=min(650, 90 + len(tabla3.index) * 30),
-        )
+        st.markdown(_estilo_tabla_quejas(tabla3, ocultar_indice=False).to_html(), unsafe_allow_html=True)
 
     # ============================================================
     # DESCARGA DEL UNIVERSO FILTRADO
