@@ -2475,6 +2475,49 @@ def _estilo_tabla_quejas(df, ocultar_indice=True):
     """
     Estilo compacto para mantener el portal visualmente limpio y ajustado al contenido.
     """
+    estilos = [
+        {
+            "selector": "thead th",  # Aplica SOLO a los encabezados superiores
+            "props": [
+                ("background-color", "#1f4e78"),
+                ("color", "white"),
+                ("font-weight", "bold"),
+                ("text-align", "center"),
+                ("font-size", "12px"),
+                ("padding", "4px 6px"),
+                ("white-space", "nowrap")
+            ],
+        },
+        {
+            "selector": "tbody tr:nth-child(even)",
+            "props": [
+                ("background-color", "#f7f9fb"),
+            ],
+        },
+        {
+            "selector": "table",
+            "props": [
+                ("width", "max-content"),
+                ("margin-bottom", "15px")
+            ]
+        }
+    ]
+
+    # Si NO se oculta el índice, le damos el estilo crema a la columna lateral
+    if not ocultar_indice:
+        estilos.append({
+            "selector": "tbody th",  # Aplica SOLO a los encabezados de fila (ej. distrito_co)
+            "props": [
+                ("background-color", "#fce4d6"),
+                ("color", "black"), 
+                ("font-weight", "bold"),
+                ("text-align", "left"),
+                ("font-size", "12px"),
+                ("padding", "4px 6px"),
+                ("white-space", "nowrap")
+            ]
+        })
+
     styler = (
         df.style
         .format(na_rep="")
@@ -2482,38 +2525,11 @@ def _estilo_tabla_quejas(df, ocultar_indice=True):
             "text-align": "center",
             "font-size": "12px",
             "padding": "3px 6px",
-            "white-space": "nowrap" # Evita que el texto salte de línea
+            "white-space": "nowrap"
         })
-        .set_table_styles([
-            {
-                "selector": "th",
-                "props": [
-                    ("background-color", "#1f4e78"),
-                    ("color", "white"),
-                    ("font-weight", "bold"),
-                    ("text-align", "center"),
-                    ("font-size", "12px"),
-                    ("padding", "4px 6px"),
-                    ("white-space", "nowrap")
-                ],
-            },
-            {
-                "selector": "tbody tr:nth-child(even)",
-                "props": [
-                    ("background-color", "#f7f9fb"),
-                ],
-            },
-            {
-                "selector": "table",
-                "props": [
-                    ("width", "max-content"), # Ajusta la tabla al texto
-                    ("margin-bottom", "15px")
-                ]
-            }
-        ])
+        .set_table_styles(estilos)
     )
     
-    # Ocultar el índice si es necesario
     if ocultar_indice:
         styler = styler.hide(axis="index")
         
@@ -3106,7 +3122,10 @@ def mostrar_reporte_quejas():
     if tabla3.empty:
         st.info("No hay datos para la matriz de quejas por distrito.")
     else:
-        st.markdown(_estilo_tabla_quejas(tabla3, ocultar_indice=False).to_html(), unsafe_allow_html=True)
+        # Extraemos el HTML de la tabla configurando ocultar_indice=False
+        html_tabla3 = _estilo_tabla_quejas(tabla3, ocultar_indice=False).to_html()
+    else:
+        st.markdown(contenedor_html, unsafe_allow_html=True)
 
     # ============================================================
     # DESCARGA DEL UNIVERSO FILTRADO
