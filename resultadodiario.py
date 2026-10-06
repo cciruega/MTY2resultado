@@ -2837,12 +2837,7 @@ def _mostrar_resumen_general_quejas(df):
                 .fillna("SIN DISTRITO")
             )
 
-            st.dataframe(
-                _estilo_tabla_quejas(top3),
-                hide_index=True,
-                width="content",
-                height=170,
-            )
+            st.markdown(_estilo_tabla_quejas(top3).to_html(), unsafe_allow_html=True)
 
 
 def mostrar_reporte_quejas():
