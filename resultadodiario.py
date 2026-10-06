@@ -3107,43 +3107,43 @@ def mostrar_reporte_quejas():
             "de ese día dividido entre el total general de folios."
         )
 
-# ============================================================
-# TABLA 3
-# ============================================================
-st.markdown(
-    f"#### 3️⃣ Quejas por Distrito — {dimension}"
-)
-
-tabla3 = _tabla_distritos_quejas(
-    df_detalle,
-    dimension,
-)
-
-if tabla3.empty:
-    st.info("No hay datos para la matriz de quejas por distrito.")
-else:
-    html_tabla3 = _estilo_tabla_quejas(
-        tabla3,
-        ocultar_indice=False
-    ).to_html()
-
-    contenedor_html = f"""
-    <div style="
-        width: 100%;
-        max-height: 600px;
-        overflow-x: auto;
-        overflow-y: auto;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-    ">
-        {html_tabla3}
-    </div>
-    """
-
+    # ============================================================
+    # TABLA 3
+    # ============================================================
     st.markdown(
-        contenedor_html,
-        unsafe_allow_html=True
+        f"#### 3️⃣ Quejas por Distrito — {nombre_dimension}"
     )
+
+    tabla3 = _tabla_distritos_quejas(
+        df_detalle,
+        dimension,
+    )
+
+    if tabla3.empty:
+        st.info("No hay datos para la matriz de quejas por distrito.")
+    else:
+        html_tabla3 = _estilo_tabla_quejas(
+            tabla3,
+            ocultar_indice=False
+        ).to_html()
+
+        contenedor_html = f"""
+        <div style="
+            width: 100%;
+            max-height: 600px;
+            overflow-x: auto;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        ">
+            {html_tabla3}
+        </div>
+        """
+
+        st.markdown(
+            contenedor_html,
+            unsafe_allow_html=True
+        )
 
     # ============================================================
     # DESCARGA DEL UNIVERSO FILTRADO
