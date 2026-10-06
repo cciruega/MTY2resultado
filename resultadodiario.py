@@ -3108,27 +3108,44 @@ def mostrar_reporte_quejas():
         )
 
     # ============================================================
-    # TABLA 3
-    # ============================================================
+# TABLA 3
+# ============================================================
+st.markdown(
+    f"#### 3️⃣ Quejas por Distrito — {nombre_dimension}"
+)
+
+tabla3 = _tabla_distritos_quejas(
+    df_detalle,
+    dimension,
+)
+
+if tabla3.empty:
+    st.info("No hay datos para la matriz de quejas por distrito.")
+else:
+    # Generamos el HTML de la tabla
+    html_tabla3 = _estilo_tabla_quejas(
+        tabla3,
+        ocultar_indice=False
+    ).to_html()
+
+    # Contenedor con scroll horizontal y vertical
+    contenedor_html = f"""
+    <div style="
+        width: 100%;
+        max-height: 600px;
+        overflow-x: auto;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+    ">
+        {html_tabla3}
+    </div>
+    """
+
     st.markdown(
-        f"#### 3️⃣ Quejas por Distrito — {nombre_dimension}"
+        contenedor_html,
+        unsafe_allow_html=True
     )
-
-    tabla3 = _tabla_distritos_quejas(
-        df_detalle,
-        dimension,
-    )
-
-    if tabla3.empty:
-        st.info("No hay datos para la matriz de quejas por distrito.")
-    else:
-        # Extraemos el HTML de la tabla configurando ocultar_indice=False
-        html_tabla3 = _estilo_tabla_quejas(tabla3, ocultar_indice=False).to_html()
-        # Envolvemos la tabla en un div con scroll usando una variable separada
-        contenedor_html = f"""
-        """
-    
-    st.markdown(contenedor_html, unsafe_allow_html=True)
 
     # ============================================================
     # DESCARGA DEL UNIVERSO FILTRADO
