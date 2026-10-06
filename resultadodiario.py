@@ -3130,9 +3130,9 @@ def mostrar_reporte_quejas():
 
         contenedor_html = f"""
         <div style="
-            width: 100%;
+            width: max-content;
             max-width: 100%;
-            max-height: 450px;
+            max-height: 350px;
             overflow-x: auto;
             overflow-y: auto;
             border: 1px solid #ddd;
