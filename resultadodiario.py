@@ -2737,7 +2737,7 @@ def _altura_tabla_quejas(df, fila_px=30, encabezado_px=34, margen_px=4):
 
 
 def _mostrar_resumen_general_quejas(df):
-    st.markdown("### 📊 Resumen General")
+    st.markdown("### 📄 Resumen General")
 
     total = len(df)
     dil6 = int((df["dilacion"] > 6).sum())
@@ -2806,7 +2806,7 @@ def _mostrar_resumen_general_quejas(df):
         )
 
     with col_cope:
-        st.markdown("#### 🏆 Top 5 COPE")
+        st.markdown("#### 🚩 Quejas por COPE")
 
         top_copes = (
             df.groupby("cope")
