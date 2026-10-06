@@ -3126,6 +3126,9 @@ def mostrar_reporte_quejas():
         html_tabla3 = _estilo_tabla_quejas(tabla3, ocultar_indice=False).to_html()
         # Envolvemos la tabla en un div con scroll usando una variable separada
         contenedor_html = f"""
+        """
+    
+    st.markdown(contenedor_html, unsafe_allow_html=True)
 
     # ============================================================
     # DESCARGA DEL UNIVERSO FILTRADO
