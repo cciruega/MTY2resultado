@@ -3111,7 +3111,7 @@ def mostrar_reporte_quejas():
 # TABLA 3
 # ============================================================
 st.markdown(
-    f"#### 3️⃣ Quejas por Distrito — {nombre_dimension}"
+    f"#### 3️⃣ Quejas por Distrito — {dimension}"
 )
 
 tabla3 = _tabla_distritos_quejas(
@@ -3122,13 +3122,11 @@ tabla3 = _tabla_distritos_quejas(
 if tabla3.empty:
     st.info("No hay datos para la matriz de quejas por distrito.")
 else:
-    # Generamos el HTML de la tabla
     html_tabla3 = _estilo_tabla_quejas(
         tabla3,
         ocultar_indice=False
     ).to_html()
 
-    # Contenedor con scroll horizontal y vertical
     contenedor_html = f"""
     <div style="
         width: 100%;
