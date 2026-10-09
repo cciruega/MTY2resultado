@@ -1029,7 +1029,7 @@ def mostrar_reporte_telcel():
         )
 
 
-def mostrar_tablero_bolsas():
+    def mostrar_tablero_bolsas():
         #
 
 # 2. FUNCIÓN DE EXTRACCIÓN CON ANTI-BLOQUEO
