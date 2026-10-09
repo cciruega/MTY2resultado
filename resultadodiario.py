@@ -1029,42 +1029,42 @@ def mostrar_reporte_telcel():
         )
 
 
-    def mostrar_tablero_bolsas():
+        def mostrar_tablero_bolsas():
         #
 
-# 2. FUNCIÓN DE EXTRACCIÓN CON ANTI-BLOQUEO
-@st.cache_data(ttl=3600, show_spinner=False)  
-def obtener_base_fielders_clarodrive():
-    # Simulamos ser un navegador (Headers) para evitar rechazos de Clarodrive
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
-    url = "https://i0000.clarodrive.com/s/9LdJSbwx9yBC5mi/download"
-
-    res = requests.get(url, headers=headers)
-    res.raise_for_status()
-
-    # Manejo dinámico de ZIP o Excel directo
-    try:
-        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-            archivos_xlsx = [f for f in z.infolist() if f.filename.lower().endswith('.xlsx')]
-            if archivos_xlsx:
-                archivos_xlsx.sort(key=lambda x: x.date_time)
-                with z.open(archivos_xlsx[-1]) as f:
-                    contenido_excel = f.read()
-            else:
+        # 2. FUNCIÓN DE EXTRACCIÓN CON ANTI-BLOQUEO
+        @st.cache_data(ttl=3600, show_spinner=False)  
+        def obtener_base_fielders_clarodrive():
+            # Simulamos ser un navegador (Headers) para evitar rechazos de Clarodrive
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
+            url = "https://i0000.clarodrive.com/s/9LdJSbwx9yBC5mi/download"
+        
+            res = requests.get(url, headers=headers)
+            res.raise_for_status()
+        
+            # Manejo dinámico de ZIP o Excel directo
+            try:
+                with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                    archivos_xlsx = [f for f in z.infolist() if f.filename.lower().endswith('.xlsx')]
+                    if archivos_xlsx:
+                        archivos_xlsx.sort(key=lambda x: x.date_time)
+                        with z.open(archivos_xlsx[-1]) as f:
+                            contenido_excel = f.read()
+                    else:
+                        contenido_excel = res.content
+            except zipfile.BadZipFile:
                 contenido_excel = res.content
-    except zipfile.BadZipFile:
-        contenido_excel = res.content
-
-    # Leemos fila 3 (header=2) y estrictamente las columnas P y Y
-    df_ext = pd.read_excel(
-        io.BytesIO(contenido_excel), 
-        sheet_name='Detalle1', 
-        header=2, 
-        usecols="P,Y" 
-    )
-    # Renombramos a la fuerza para ignorar errores
-    df_ext.columns = ['osalta', 'NOM_ESTRATEGIA']
-    return df_ext
+        
+            # Leemos fila 3 (header=2) y estrictamente las columnas P y Y
+            df_ext = pd.read_excel(
+                io.BytesIO(contenido_excel), 
+                sheet_name='Detalle1', 
+                header=2, 
+                usecols="P,Y" 
+            )
+            # Renombramos a la fuerza para ignorar errores
+            df_ext.columns = ['osalta', 'NOM_ESTRATEGIA']
+            return df_ext
 
     # ---------------------------------------------------------
     # 🎨 ESTILOS CORPORATIVOS (OCULTAR ICONOS DE STREAMLIT/GITHUB)
