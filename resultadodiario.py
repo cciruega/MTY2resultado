@@ -363,6 +363,90 @@ def mostrar_resultados_diarios():
             height: 5px;
         }
 
+        /* =====================================================
+           CIERRE DEL DÍA - TIENDAS
+           ===================================================== */
+        .tiendas-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            width: 100%;
+            align-items: start;
+            margin-bottom: 8px;
+        }
+
+        .tiendas-fila-inferior .tienda-card:first-child {
+            grid-column: 2;
+        }
+
+        .tiendas-fila-inferior .tienda-card:nth-child(2) {
+            grid-column: 3;
+        }
+
+        .tienda-card {
+            min-width: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .tienda-titulo {
+            background-color: #cfe2f3;
+            color: #111;
+            font-size: 11px;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px 3px;
+            margin-bottom: 2px;
+        }
+
+        .tienda-tabla {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        .tienda-tabla td {
+            border: none;
+            padding: 3px 2px;
+            vertical-align: middle;
+            line-height: 1.15;
+        }
+
+        .tienda-label {
+            width: 68%;
+            text-align: left;
+            font-size: 10px;
+            font-weight: bold;
+            overflow-wrap: anywhere;
+        }
+
+        .tienda-valor {
+            width: 32%;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            background-color: #fce4d6;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 900px) {
+            .tiendas-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px;
+            }
+
+            .tiendas-fila-inferior .tienda-card:first-child,
+            .tiendas-fila-inferior .tienda-card:nth-child(2) {
+                grid-column: auto;
+            }
+        }
+
+        @media (max-width: 520px) {
+            .tiendas-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
     </style>
     """)
 
@@ -529,6 +613,65 @@ def mostrar_resultados_diarios():
                 </tbody>
             </table>
         """)
+
+        # ========================================================
+        # CIERRE DEL DÍA - TIENDAS (DESDE LA FILA 20 DE SHEETS)
+        # ========================================================
+
+        t_tiendas = obtener_valor(df, 19, 0) or "Cierre del Día Tiendas"
+        h.append('<div class="separador"></div>')
+        h.append(f'<div class="titulo-seccion">{t_tiendas}</div>')
+
+        def agregar_tarjeta_tienda(fila_encabezado, fila_inicio, fila_fin, col):
+            """Agrega una tarjeta de tienda leyendo las celdas de Google Sheets."""
+            encabezado = obtener_valor(df, fila_encabezado, col)
+            if not encabezado:
+                return
+
+            h.append('<div class="tienda-card">')
+            h.append(f'<div class="tienda-titulo">{encabezado}</div>')
+            h.append('<table class="tienda-tabla"><tbody>')
+
+            for r in range(fila_inicio, fila_fin + 1):
+                etiqueta = obtener_valor(df, r, col)
+                valor = obtener_valor(df, r, col + 1)
+
+                # No mostrar renglones completamente vacíos.
+                if not etiqueta and not valor:
+                    continue
+
+                h.append(
+                    '<tr>'
+                    f'<td class="tienda-label">{etiqueta}</td>'
+                    f'<td class="tienda-valor">{valor}</td>'
+                    '</tr>'
+                )
+
+            h.append('</tbody></table></div>')
+
+        # Primera fila de tarjetas: Escobedo, La Silla, Guadalupe y Santa Fe.
+        # Hoja de cálculo: fila 22 (encabezados) y filas 23 a 30 (datos).
+        h.append('<div class="tiendas-grid">')
+        for col in [0, 3, 6, 9]:
+            agregar_tarjeta_tienda(
+                fila_encabezado=21,
+                fila_inicio=22,
+                fila_fin=29,
+                col=col,
+            )
+        h.append('</div>')
+
+        # Segunda fila: Santa Catarina y Puentes, ubicadas al centro como en Sheets.
+        # Hoja de cálculo: fila 32 (encabezados) y filas 33 a 40 (datos).
+        h.append('<div class="tiendas-grid tiendas-fila-inferior">')
+        for col in [3, 6]:
+            agregar_tarjeta_tienda(
+                fila_encabezado=31,
+                fila_inicio=32,
+                fila_fin=39,
+                col=col,
+            )
+        h.append('</div>')
 
         # ========================================================
         # CERRAR CONTENEDOR
