@@ -3348,28 +3348,66 @@ def _crear_excel_quejas(df):
 # 5. VISTA: PRESENTACIÓN EJECUTIVA INTERACTIVA (ÁREA MTY 2)
 # ============================================================
 def mostrar_presentacion_ejecutiva():
-    # Estilos compactos tipo diapositiva ejecutiva
     st.markdown("""
         <style>
             .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
             .titulo-bloque {
                 background-color: #002060; color: white; padding: 4px 8px;
-                font-weight: bold; font-size: 13px; border-radius: 3px;
-                margin-top: 6px; margin-bottom: 4px; text-align: left;
+                font-weight: bold; font-size: 12.5px; border-radius: 3px;
+                margin-top: 8px; margin-bottom: 4px; text-align: left;
             }
             .sub-bloque {
                 background-color: #1f4e78; color: white; padding: 3px 6px;
                 font-weight: bold; font-size: 11px; text-align: center;
-                border-radius: 2px; margin-bottom: 3px;
+                border-radius: 2px; margin-bottom: 3px; white-space: nowrap;
             }
-            .kpi-mini-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-            .kpi-mini-table th { background-color: #002060; color: white; padding: 4px; text-align: center; }
-            .kpi-mini-table td { border-bottom: 1px solid #e0e0e0; padding: 3px 6px; }
-            .kpi-mini-table tr:nth-child(even) { background-color: #f4f7fa; }
+            .tabla-ejecutiva {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 11.5px;
+                margin-bottom: 6px;
+            }
+            .tabla-ejecutiva th {
+                background-color: #1f4e78;
+                color: white;
+                padding: 4px 6px;
+                text-align: center;
+                white-space: nowrap;
+                border: 1px solid #d0d7de;
+            }
+            .tabla-ejecutiva td {
+                padding: 3px 6px;
+                border-bottom: 1px solid #e0e0e0;
+                white-space: nowrap;
+            }
+            .tabla-ejecutiva tr:nth-child(even) { background-color: #f4f7fa; }
         </style>
     """, unsafe_allow_html=True)
 
-    # Mapeo oficial Municipio -> Tiendas MTY 2
+    # Función auxiliar para renderizar tablas autoajustadas al texto y sin scroll
+    def render_tabla_compacta(df_in, cols_izq=None):
+        if df_in is None or df_in.empty:
+            return
+        if cols_izq is None:
+            cols_izq = [df_in.columns[0]]
+        html = ['<table class="tabla-ejecutiva"><thead><tr>']
+        for col in df_in.columns:
+            html.append(f"<th>{escape(str(col))}</th>")
+        html.append("</tr></thead><tbody>")
+        for _, row in df_in.iterrows():
+            html.append("<tr>")
+            for col in df_in.columns:
+                alineacion = "left" if col in cols_izq else "center"
+                val = row[col]
+                if isinstance(val, (int, np.integer)):
+                    val_str = f"{val:,}"
+                else:
+                    val_str = escape(str(val))
+                html.append(f'<td style="text-align:{alineacion};">{val_str}</td>')
+            html.append("</tr>")
+        html.append("</tbody></table>")
+        st.markdown("".join(html), unsafe_allow_html=True)
+
     MAPA_MUNICIPIO_TIENDAS = {
         "GARCIA": ["SFE"],
         "SANTA CATARINA": ["SCA"],
@@ -3389,7 +3427,7 @@ def mostrar_presentacion_ejecutiva():
         "📂 Cargar Excel Inventarios / INEGI (Opcional)",
         type=["xlsx", "csv"],
         key="pres_inv_uploader",
-        help="Debe contener columna MUNICIPIO (GARCIA, SANTA CATARINA, ESCOBEDO, SAN NICOLAS, GUADALUPE)"
+        help="Debe contener columna MUNICIPIO (AREA MONTERREY 2, GARCIA, SANTA CATARINA, ESCOBEDO, SAN NICOLAS, GUADALUPE)"
     )
     geojson_file = st.sidebar.file_uploader(
         "🗺️ Cargar GeoJSON Municipios NL (Opcional)",
@@ -3408,7 +3446,7 @@ def mostrar_presentacion_ejecutiva():
         )
     with c_tit2:
         if st.session_state.muni_activo != "AREA MONTERREY 2":
-            if st.button("🔄 Vista General MTY 2", use_container_width=True):
+            if st.button("🔄 Vista General MTY 2", width="stretch"):
                 st.session_state.muni_activo = "AREA MONTERREY 2"
                 st.rerun()
 
@@ -3417,7 +3455,6 @@ def mostrar_presentacion_ejecutiva():
     # --------------------------------------------------------
     @st.cache_data(ttl=600, show_spinner=False)
     def obtener_datos_consolidados_pres():
-        # 1. BOLSA ÁREA (Reutilizando lógica de Tablero Bolsas)
         df_bolsa_raw = pd.DataFrame()
         url_bolsas = "https://i0000.clarodrive.com/s/KRrAxbKcriJiwcK/download"
         try:
@@ -3439,7 +3476,6 @@ def mostrar_presentacion_ejecutiva():
                         }
                         df_b['AREA_CORREGIDA'] = df_b['CT'].map(dic_ct)
                         df_b = df_b[df_b['AREA_CORREGIDA'] == 'MONTERREY 2']
-                        # Asignación corta de tienda por CT para cruce directo
                         dic_ct_tienda = {
                             "CT SANTA FE [MTY]": "SFE", "CT UNIVERSIDAD (NL)": "GES",
                             "CT LA SILLA": "LAS", "CT PUENTES": "PUN", "CT SANTA CATARINA": "SCA"
@@ -3449,7 +3485,6 @@ def mostrar_presentacion_ejecutiva():
         except Exception:
             pass
 
-        # 2. QUEJAS (Reutilizando tus funciones exactas de Reporte Quejas)
         df_quejas_raw = pd.DataFrame()
         bytes_q, _, _ = obtener_archivo_clarodrive_quejas()
         if bytes_q:
@@ -3466,7 +3501,6 @@ def mostrar_presentacion_ejecutiva():
     with st.spinner("Sincronizando fuentes en vivo..."):
         df_bolsas_mty2, df_quejas_mty2 = obtener_datos_consolidados_pres()
 
-    # Filtro activo según clic en el mapa
     muni_sel = st.session_state.muni_activo
     tiendas_filtradas = (
         ["SFE", "SCA", "GES", "PUN", "GPE", "LAS"]
@@ -3474,20 +3508,19 @@ def mostrar_presentacion_ejecutiva():
         else MAPA_MUNICIPIO_TIENDAS.get(muni_sel, [])
     )
 
-    if not df_bolsas_mty2.empty:
-        df_b_view = df_bolsas_mty2[df_bolsas_mty2['TIENDA_CORTA'].isin(tiendas_filtradas)]
-    else:
-        df_b_view = pd.DataFrame()
-
-    if not df_quejas_mty2.empty:
-        df_q_view = df_quejas_mty2[df_quejas_mty2['TIENDA'].isin(tiendas_filtradas)]
-    else:
-        df_q_view = pd.DataFrame()
+    df_b_view = (
+        df_bolsas_mty2[df_bolsas_mty2['TIENDA_CORTA'].isin(tiendas_filtradas)]
+        if not df_bolsas_mty2.empty else pd.DataFrame()
+    )
+    df_q_view = (
+        df_quejas_mty2[df_quejas_mty2['TIENDA'].isin(tiendas_filtradas)]
+        if not df_quejas_mty2.empty else pd.DataFrame()
+    )
 
     # ========================================================
-    # ESTRUCTURA DE 3 COLUMNAS (IDÉNTICA A TU BOCETO)
+    # ESTRUCTURA DE 3 COLUMNAS
     # ========================================================
-    col_izq, col_centro, col_der = st.columns([1.15, 1.75, 1.05], gap="small")
+    col_izq, col_centro, col_der = st.columns([1.2, 1.7, 1.1], gap="small")
 
     # --------------------------------------------------------
     # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG Y QUEJAS
@@ -3521,7 +3554,7 @@ def mostrar_presentacion_ejecutiva():
                 featureidkey="properties.MUNI_KEY",
                 color="MUNICIPIO",
                 map_style="carto-positron",
-                zoom=9.3,
+                zoom=9.2,
                 center={"lat": 25.74, "lon": -100.42},
                 opacity=0.65,
                 height=310
@@ -3535,19 +3568,14 @@ def mostrar_presentacion_ejecutiva():
                 hover_name="MUNICIPIO",
                 text="MUNICIPIO",
                 map_style="carto-positron",
-                zoom=9.3,
+                zoom=9.2,
                 center={"lat": 25.74, "lon": -100.42},
                 height=310
             )
             fig_mapa.update_traces(marker=dict(sizemin=18))
 
-        fig_mapa.update_layout(
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False,
-            clickmode="event+select"
-        )
+        fig_mapa.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False, clickmode="event+select")
 
-        # Detección de clic sobre municipio
         evento = st.plotly_chart(fig_mapa, width="stretch", on_select="rerun", key="mapa_ejecutivo_mty2")
         if evento and getattr(evento, "selection", None) and evento.selection.get("points"):
             pt = evento.selection["points"][0]
@@ -3558,49 +3586,45 @@ def mostrar_presentacion_ejecutiva():
                     st.session_state.muni_activo = muni_clic
                     st.rerun()
 
-        # Sub-fila inferior central: Backlog por TIENDA + Quejas por COPE
-        sub_b1, sub_b2 = st.columns([1.25, 0.95], gap="small")
-        with sub_b1:
-            st.markdown('<div class="titulo-bloque">1️⃣ Backlog por TIENDA y rango de dilación</div>', unsafe_allow_html=True)
-            if not df_q_view.empty:
-                t_backlog = _tabla_resumen_dilacion_quejas(df_q_view, "TIENDA")
-                st.dataframe(t_backlog, hide_index=True, use_container_width=True, height=220)
-            else:
-                st.info("Sin datos de backlog.")
+        # Sub-fila inferior central: Backlog por TIENDA + Quejas por COPE (autoajustadas y ocultables)
+        t_backlog = _tabla_resumen_dilacion_quejas(df_q_view, "TIENDA") if not df_q_view.empty else pd.DataFrame()
+        t_cope = (
+            df_q_view.groupby("cope").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
+            if not df_q_view.empty else pd.DataFrame()
+        )
 
-        with sub_b2:
-            st.markdown('<div class="titulo-bloque">🚩 Quejas por COPE</div>', unsafe_allow_html=True)
-            if not df_q_view.empty:
-                t_cope = (
-                    df_q_view.groupby("cope").size()
-                    .sort_values(ascending=False)
-                    .rename("FOLIOS").reset_index()
-                )
-                st.dataframe(t_cope, hide_index=True, use_container_width=True, height=220)
-            else:
-                st.info("Sin datos de COPE.")
+        if not t_backlog.empty or not t_cope.empty:
+            sub_b1, sub_b2 = st.columns([1.3, 0.9], gap="small")
+            with sub_b1:
+                if not t_backlog.empty:
+                    st.markdown('<div class="titulo-bloque">1️⃣ Backlog por TIENDA y dilación</div>', unsafe_allow_html=True)
+                    render_tabla_compacta(t_backlog)
+            with sub_b2:
+                if not t_cope.empty:
+                    st.markdown('<div class="titulo-bloque">🚩 Quejas por COPE</div>', unsafe_allow_html=True)
+                    render_tabla_compacta(t_cope)
 
     # --------------------------------------------------------
     # COLUMNA IZQUIERDA: RESULTADOS + INVENTARIOS + TOP DISTRITOS
     # --------------------------------------------------------
     with col_izq:
-        st.markdown('<div class="titulo-bloque">MONTERREY 2 — Resultados</div>', unsafe_allow_html=True)
-        # Tabla compacta de resultados (conectable a tu Google Sheet por tienda)
+        st.markdown(f'<div class="titulo-bloque">{muni_sel} — Resultados</div>', unsafe_allow_html=True)
         df_res_demo = pd.DataFrame({
             "Indicador": ["Ventas", "Altas", "Bajas", "Ganancia Activa"],
             "Cierre 2025": ["32,040", "29,932", "8,212", "5,992"],
             "Meta 2026": ["41,206", "39,558", "6,734", "13,254"],
             "Acum": ["34,992", "31,368", "6,152", "6,045"]
         })
-        st.dataframe(df_res_demo, hide_index=True, use_container_width=True, height=155)
+        render_tabla_compacta(df_res_demo)
 
         st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
         if archivo_inv is not None:
             df_inv_up = pd.read_excel(archivo_inv) if archivo_inv.name.endswith("xlsx") else pd.read_csv(archivo_inv)
             df_inv_up.columns = df_inv_up.columns.str.strip().str.upper()
-            if muni_sel != "AREA MONTERREY 2" and "MUNICIPIO" in df_inv_up.columns:
-                df_inv_up = df_inv_up[df_inv_up["MUNICIPIO"].str.upper() == muni_sel]
-            st.dataframe(df_inv_up, hide_index=True, use_container_width=True, height=240)
+            if "MUNICIPIO" in df_inv_up.columns:
+                df_inv_up = df_inv_up[df_inv_up["MUNICIPIO"].str.upper() == muni_sel].drop(columns=["MUNICIPIO"])
+            if not df_inv_up.empty:
+                render_tabla_compacta(df_inv_up)
         else:
             df_inv_base = pd.DataFrame({
                 "Concepto": [
@@ -3615,37 +3639,41 @@ def mostrar_presentacion_ejecutiva():
                     "99%", "117,700", "1,011", "85,355", "IZZI (200 MB $640)"
                 ]
             })
-            st.dataframe(df_inv_base, hide_index=True, use_container_width=True, height=240)
+            render_tabla_compacta(df_inv_base)
 
-        # Top 3 Distritos por Zona (idéntico al pie izquierdo de tu boceto)
-        zonas_op = ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]
-        cols_z = st.columns(3, gap="small")
-        for cz, z_nom in zip(cols_z, zonas_op):
-            with cz:
-                st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
-                if not df_q_view.empty:
-                    sub_z = df_q_view[df_q_view["zona"] == z_nom]
+        # Top 3 Distritos por Zona: SOLO se renderizan las zonas que tienen datos
+        if not df_q_view.empty:
+            zonas_con_datos = []
+            for z_nom in ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]:
+                sub_z = df_q_view[df_q_view["zona"] == z_nom]
+                if not sub_z.empty:
                     top3_z = (
                         sub_z.groupby("distrito_co").size()
                         .sort_values(ascending=False).head(3)
                         .rename("FOLIOS").reset_index()
                     )
-                    st.dataframe(top3_z, hide_index=True, use_container_width=True, height=125)
+                    top3_z["distrito_co"] = top3_z["distrito_co"].replace("", "SIN DIST.").fillna("SIN DIST.")
+                    zonas_con_datos.append((z_nom, top3_z))
+
+            if zonas_con_datos:
+                cols_z = st.columns(len(zonas_con_datos), gap="small")
+                for cz, (z_nom, df_z_tabla) in zip(cols_z, zonas_con_datos):
+                    with cz:
+                        st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
+                        render_tabla_compacta(df_z_tabla)
 
     # --------------------------------------------------------
     # COLUMNA DERECHA: CANAL + BOLSA ÁREA
     # --------------------------------------------------------
     with col_der:
-        st.markdown('<div class="titulo-bloque">CANAL</div>', unsafe_allow_html=True)
         if not df_b_view.empty and "CANAL" in df_b_view.columns:
             df_can = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
-            total_c = df_can["FOLIOS"].sum()
-            df_can["%"] = (df_can["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
-            st.dataframe(df_can, hide_index=True, use_container_width=True, height=230)
-        else:
-            st.info("Sin datos de canal.")
+            if not df_can.empty:
+                st.markdown('<div class="titulo-bloque">CANAL</div>', unsafe_allow_html=True)
+                total_c = df_can["FOLIOS"].sum()
+                df_can["%"] = (df_can["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
+                render_tabla_compacta(df_can)
 
-        st.markdown('<div class="titulo-bloque">Bolsa Área</div>', unsafe_allow_html=True)
         if not df_b_view.empty and "ESTATUS_AGR_N2" in df_b_view.columns:
             df_6m_p = df_b_view[df_b_view["ULTIMOS_6_MESES"] == "SI"]
             t_bolsa = (
@@ -3653,10 +3681,9 @@ def mostrar_presentacion_ejecutiva():
                 .rename("Total").reset_index()
                 .rename(columns={"ESTATUS_AGR_N2": "ESTATUS_AGR"})
             )
-            st.dataframe(t_bolsa, hide_index=True, use_container_width=True, height=310)
-        else:
-            st.info("Sin datos de bolsa.")
-
+            if not t_bolsa.empty:
+                st.markdown('<div class="titulo-bloque">Bolsa Área</div>', unsafe_allow_html=True)
+                render_tabla_compacta(t_bolsa)
 # ============================================================
 # 6. RUTEO PRINCIPAL
 # ============================================================
