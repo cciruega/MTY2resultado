@@ -3527,39 +3527,64 @@ def mostrar_presentacion_ejecutiva():
     # --------------------------------------------------------
     with col_centro:
         df_coords = pd.DataFrame({
+            "CVE_MUN": ["018", "048", "021", "046", "026"],
             "MUNICIPIO": ["GARCIA", "SANTA CATARINA", "ESCOBEDO", "SAN NICOLAS", "GUADALUPE"],
             "lat": [25.811, 25.673, 25.808, 25.741, 25.677],
             "lon": [-100.598, -100.458, -100.326, -100.283, -100.259],
             "Viviendas": [135000, 110000, 145000, 120000, 135992]
         })
 
+        # 1. Leer GeoJSON desde uploader manual o automáticamente desde el repositorio (19mun.json)
+        geojson_nl = None
+        ruta_repo_geojson = os.path.join(os.path.dirname(os.path.abspath(__file__)), "19mun.json")
+
         if geojson_file is not None:
             geojson_nl = json.load(geojson_file)
+        elif os.path.exists(ruta_repo_geojson):
+            with open(ruta_repo_geojson, "r", encoding="utf-8") as f:
+                geojson_nl = json.load(f)
+
+        if geojson_nl is not None:
             reemplazos = {
                 "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U",
                 "GENERAL ESCOBEDO": "ESCOBEDO",
                 "SAN NICOLAS DE LOS GARZA": "SAN NICOLAS"
             }
+            cves_mty2 = {"018", "048", "021", "046", "026"}
+            mapa_cve_nombre = dict(zip(df_coords["CVE_MUN"], df_coords["MUNICIPIO"]))
+            features_filtradas = []
+
             for feature in geojson_nl.get("features", []):
                 props = feature.get("properties", {})
+                cve = str(props.get("CVE_MUN", "")).zfill(3)
                 nom = str(props.get("NOMGEO") or props.get("NOM_MUN") or props.get("name") or "").upper().strip()
                 for k, v in reemplazos.items():
                     nom = nom.replace(k, v)
-                props["MUNI_KEY"] = nom
+
+                if cve in cves_mty2:
+                    props["MUNI_KEY"] = mapa_cve_nombre[cve]
+                    features_filtradas.append(feature)
+                elif nom in MAPA_MUNICIPIO_TIENDAS:
+                    props["MUNI_KEY"] = nom
+                    features_filtradas.append(feature)
+
+            geojson_mty2 = {"type": "FeatureCollection", "features": features_filtradas}
 
             fig_mapa = px.choropleth_map(
                 df_coords,
-                geojson=geojson_nl,
+                geojson=geojson_mty2,
                 locations="MUNICIPIO",
                 featureidkey="properties.MUNI_KEY",
                 color="MUNICIPIO",
+                hover_name="MUNICIPIO",
                 map_style="carto-positron",
-                zoom=9.2,
+                zoom=9.1,
                 center={"lat": 25.74, "lon": -100.42},
                 opacity=0.65,
                 height=310
             )
         else:
+            st.warning("⚠️ No se encontró '19mun.json' en la carpeta del script.")
             fig_mapa = px.scatter_map(
                 df_coords,
                 lat="lat", lon="lon",
@@ -3568,7 +3593,7 @@ def mostrar_presentacion_ejecutiva():
                 hover_name="MUNICIPIO",
                 text="MUNICIPIO",
                 map_style="carto-positron",
-                zoom=9.2,
+                zoom=9.1,
                 center={"lat": 25.74, "lon": -100.42},
                 height=310
             )
