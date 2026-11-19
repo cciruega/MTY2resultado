@@ -3357,8 +3357,8 @@ def mostrar_presentacion_ejecutiva():
                 margin-top: 8px; margin-bottom: 4px; text-align: left;
             }
             .sub-bloque {
-                background-color: #1f4e78; color: white; padding: 3px 6px;
-                font-weight: bold; font-size: 11px; text-align: center;
+                background-color: #1f4e78; color: white; padding: 3px 4px;
+                font-weight: bold; font-size: 10.5px; text-align: center;
                 border-radius: 2px; margin-bottom: 3px; white-space: nowrap;
             }
             .tabla-ejecutiva {
@@ -3381,15 +3381,22 @@ def mostrar_presentacion_ejecutiva():
                 white-space: nowrap;
             }
             .tabla-ejecutiva tr:nth-child(even) { background-color: #f4f7fa; }
+            .tabla-mini {
+                font-size: 10.5px;
+            }
+            .tabla-mini th, .tabla-mini td {
+                padding: 2px 4px;
+            }
         </style>
     """, unsafe_allow_html=True)
 
-    def render_tabla_compacta(df_in, cols_izq=None):
+    def render_tabla_compacta(df_in, cols_izq=None, mini=False):
         if df_in is None or df_in.empty:
             return
         if cols_izq is None:
             cols_izq = [df_in.columns[0]]
-        html = ['<table class="tabla-ejecutiva"><thead><tr>']
+        clase_extra = " tabla-mini" if mini else ""
+        html = [f'<table class="tabla-ejecutiva{clase_extra}"><thead><tr>']
         for col in df_in.columns:
             html.append(f"<th>{escape(str(col))}</th>")
         html.append("</tr></thead><tbody>")
@@ -3424,6 +3431,25 @@ def mostrar_presentacion_ejecutiva():
         "GARCIA": "ABG MUNICIPIO VGA",
     }
 
+    # Fila en Excel (1-indexed) dentro de "Reporte 8 Columnas"
+    MAPA_MUNI_FILA_8COL = {
+        "AREA MONTERREY 2": 31,
+        "GUADALUPE": 44,
+        "ESCOBEDO": 47,
+        "SAN NICOLAS": 48,
+        "GARCIA": 49,
+        "SANTA CATARINA": 50,
+    }
+
+    # Clave INEGI en "nuevo-leon-municipios.csv"
+    MAPA_MUNI_CLAVE_DENUE = {
+        "GARCIA": "19018",
+        "ESCOBEDO": "19021",
+        "GUADALUPE": "19026",
+        "SAN NICOLAS": "19046",
+        "SANTA CATARINA": "19048",
+    }
+
     if "muni_activo" not in st.session_state:
         st.session_state.muni_activo = "AREA MONTERREY 2"
 
@@ -3431,11 +3457,11 @@ def mostrar_presentacion_ejecutiva():
     # BARRA LATERAL: CARGA DE FUENTES COMPLEMENTARIAS
     # --------------------------------------------------------
     st.sidebar.header("⚙️ Fuentes de Presentación")
-    archivo_inv = st.sidebar.file_uploader(
-        "📂 Cargar Excel Inventarios / INEGI (Opcional)",
-        type=["xlsx", "csv"],
+    archivo_8col_manual = st.sidebar.file_uploader(
+        "📂 Cargar 'Reporte 8 Columnas' (Opcional)",
+        type=["xlsx", "xls"],
         key="pres_inv_uploader",
-        help="Debe contener columna MUNICIPIO (AREA MONTERREY 2, GARCIA, SANTA CATARINA, ESCOBEDO, SAN NICOLAS, GUADALUPE)"
+        help="Si no se sube aquí, se busca automáticamente en ClaroDrive o en el repositorio."
     )
     geojson_file = st.sidebar.file_uploader(
         "🗺️ Cargar GeoJSON Municipios NL (Opcional)",
@@ -3459,13 +3485,24 @@ def mostrar_presentacion_ejecutiva():
                 st.rerun()
 
     # --------------------------------------------------------
-    # LECTURA DE ARCHIVOS ABG (CLARODRIVE)
+    # FUNCIONES AUXILIARES DE LECTURA (ABG, 8 COLUMNAS Y DENUE)
     # --------------------------------------------------------
     def _col_excel_a_idx(col_str):
         idx = 0
         for ch in col_str.upper():
             idx = idx * 26 + (ord(ch) - ord("A") + 1)
         return idx - 1
+
+    def _a_numero(val):
+        if pd.isna(val) or str(val).strip() == "":
+            return 0.0
+        if isinstance(val, (int, float, np.number)):
+            return float(val)
+        s = str(val).strip().replace(",", "").replace("%", "")
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
 
     def _formatear_valor_abg(val, es_porcentaje=False):
         if pd.isna(val) or str(val).strip() == "":
@@ -3482,17 +3519,17 @@ def mostrar_presentacion_ejecutiva():
             num = float(val)
 
         if es_porcentaje:
-            # Si Excel guarda 15% como 0.15 o como 15.0
             if -2.0 <= num <= 2.0 and num != 0:
                 return f"{num * 100:,.1f}%"
             return f"{num:,.1f}%"
         return f"{int(round(num)):,}"
 
     @st.cache_data(ttl=600, show_spinner=False)
-    def obtener_datos_abg_clarodrive():
+    def obtener_datos_abg_y_8col_clarodrive():
         url_abg = "https://i0000.clarodrive.com/s/LRA8fWmQ9SBeLNx/download"
         headers = {"User-Agent": "Mozilla/5.0"}
         datos_por_clave = {}
+        bytes_8col = None
         try:
             resp = requests.get(url_abg, headers=headers, timeout=20)
             resp.raise_for_status()
@@ -3504,11 +3541,15 @@ def mostrar_presentacion_ejecutiva():
                     if base_name.startswith("~"):
                         continue
                     nombre_limpio = os.path.splitext(base_name)[0].upper().strip()
+
+                    if nombre_limpio.startswith("REPORTE 8 COLUMNAS"):
+                        bytes_8col = z.read(info.filename)
+                        continue
+
                     for clave_buscada in MAPA_MUNI_ARCHIVO_ABG.values():
                         if clave_buscada in nombre_limpio:
                             raw_bytes = z.read(info.filename)
                             df_raw = pd.read_excel(io.BytesIO(raw_bytes), header=None)
-                            # Detectar fila de encabezados (fila 0 o fila 1 si hay banner superior)
                             header_row = 0
                             if len(df_raw) > 2:
                                 fila0_txt = " ".join(df_raw.iloc[0].fillna("").astype(str)).upper()
@@ -3516,15 +3557,78 @@ def mostrar_presentacion_ejecutiva():
                                 if "VENTA" not in fila0_txt and "VENTA" in fila1_txt:
                                     header_row = 1
                             if len(df_raw) > header_row + 1:
-                                titulos = df_raw.iloc[header_row].tolist()
-                                valores = df_raw.iloc[header_row + 1].tolist()
                                 datos_por_clave[clave_buscada] = {
-                                    "titulos": titulos,
-                                    "valores": valores
+                                    "titulos": df_raw.iloc[header_row].tolist(),
+                                    "valores": df_raw.iloc[header_row + 1].tolist()
                                 }
         except Exception:
             pass
-        return datos_por_clave
+        return datos_por_clave, bytes_8col
+
+    def _cargar_df_8_columnas(bytes_cd):
+        dir_actual = os.path.dirname(os.path.abspath(__file__))
+        if archivo_8col_manual is not None:
+            return pd.read_excel(archivo_8col_manual, header=None)
+        if bytes_cd is not None:
+            return pd.read_excel(io.BytesIO(bytes_cd), header=None)
+        # Buscar en la carpeta del repositorio Git si empieza con "Reporte 8 Columnas"
+        for archivo in os.listdir(dir_actual):
+            if archivo.upper().startswith("REPORTE 8 COLUMNAS") and archivo.lower().endswith((".xlsx", ".xls")):
+                return pd.read_excel(os.path.join(dir_actual, archivo), header=None)
+        return None
+
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def _cargar_denue_nl():
+        ruta_csv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nuevo-leon-municipios.csv")
+        if not os.path.exists(ruta_csv):
+            return {}
+        for enc in ("utf-8", "latin-1", "cp1252"):
+            try:
+                df_d = pd.read_csv(ruta_csv, encoding=enc)
+                break
+            except Exception:
+                df_d = None
+        if df_d is None or df_d.empty or len(df_d.columns) < 3:
+            return {}
+
+        # Identificar columna de establecimientos (3ra columna o por nombre)
+        col_est = df_d.columns[2]
+        for c in df_d.columns:
+            if "ESTABLECIMIENTO" in str(c).upper():
+                col_est = c
+                break
+
+        reemplazos = {"Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U"}
+        nombres_a_clave = {
+            "GARCIA": "19018",
+            "GENERAL ESCOBEDO": "19021",
+            "ESCOBEDO": "19021",
+            "GUADALUPE": "19026",
+            "SAN NICOLAS DE LOS GARZA": "19046",
+            "SAN NICOLAS": "19046",
+            "SANTA CATARINA": "19048",
+        }
+
+        resultado = {}
+        for _, row in df_d.iterrows():
+            c0 = str(row.iloc[0]).strip().upper()
+            c1 = str(row.iloc[1]).strip().upper()
+            for k, v in reemplazos.items():
+                c0 = c0.replace(k, v)
+                c1 = c1.replace(k, v)
+
+            clave_encontrada = None
+            for token in (c0.zfill(5) if c0.isdigit() else c0, c1.zfill(5) if c1.isdigit() else c1):
+                if token in MAPA_MUNI_CLAVE_DENUE.values():
+                    clave_encontrada = token
+                    break
+                if token in nombres_a_clave:
+                    clave_encontrada = nombres_a_clave[token]
+                    break
+
+            if clave_encontrada:
+                resultado[clave_encontrada] = int(round(_a_numero(row[col_est])))
+        return resultado
 
     # --------------------------------------------------------
     # CARGA EN CACHÉ DE BOLSAS Y QUEJAS EN VIVO (CLARODRIVE)
@@ -3576,7 +3680,9 @@ def mostrar_presentacion_ejecutiva():
 
     with st.spinner("Sincronizando fuentes en vivo..."):
         df_bolsas_mty2, df_quejas_mty2 = obtener_datos_consolidados_pres()
-        datos_abg_todos = obtener_datos_abg_clarodrive()
+        datos_abg_todos, bytes_8col_cd = obtener_datos_abg_y_8col_clarodrive()
+        df_8col = _cargar_df_8_columnas(bytes_8col_cd)
+        mapa_denue = _cargar_denue_nl()
 
     muni_sel = st.session_state.muni_activo
     clave_abg_actual = MAPA_MUNI_ARCHIVO_ABG.get(muni_sel, "ABG AREA")
@@ -3612,7 +3718,7 @@ def mostrar_presentacion_ejecutiva():
     col_izq, col_centro, col_der = st.columns([1.25, 1.65, 1.1], gap="small")
 
     # --------------------------------------------------------
-    # COLUMNA IZQUIERDA: RESULTADOS + CLASE + PORTA + BAJAS + INV + ZONAS
+    # COLUMNA IZQUIERDA: RESULTADOS + CLASE + PORTA + BAJAS + INVENTARIOS
     # --------------------------------------------------------
     with col_izq:
         # 1. RESULTADOS (Cols H:L y AD:AG)
@@ -3630,7 +3736,7 @@ def mostrar_presentacion_ejecutiva():
         ])
         render_tabla_compacta(df_resultados_abg)
 
-        # 2. VENTA POR CLASE (Cols U:V) y PORTABILIDAD (Cols W:Y) en dos subcolumnas compactas
+        # 2. VENTA POR CLASE (Cols U:V) y PORTABILIDAD (Cols W:Y)
         sub_c1, sub_c2 = st.columns(2, gap="small")
         with sub_c1:
             st.markdown('<div class="titulo-bloque">Venta por Clase</div>', unsafe_allow_html=True)
@@ -3663,8 +3769,59 @@ def mostrar_presentacion_ejecutiva():
         ])
         render_tabla_compacta(df_bajas)
 
+        # 4. INVENTARIOS E INFRAESTRUCTURA ("Reporte 8 Columnas" + "nuevo-leon-municipios.csv")
+        st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
+        fila_excel_1idx = MAPA_MUNI_FILA_8COL.get(muni_sel, 31)
+        fila_idx = fila_excel_1idx - 1
+
+        def _celda_8col(col_letra):
+            if df_8col is None or fila_idx >= len(df_8col):
+                return None
+            c_idx = _col_excel_a_idx(col_letra)
+            if c_idx >= len(df_8col.columns):
+                return None
+            return df_8col.iloc[fila_idx, c_idx]
+
+        # Mercado INEGI DENUE desde nuevo-leon-municipios.csv
+        if muni_sel == "AREA MONTERREY 2":
+            denue_val = sum(mapa_denue.values()) if mapa_denue else 0
+        else:
+            cve_denue = MAPA_MUNI_CLAVE_DENUE.get(muni_sel, "")
+            denue_val = mapa_denue.get(cve_denue, 0)
+
+        if df_8col is not None and fila_idx < len(df_8col):
+            pdm_mty2 = _formatear_valor_abg(_celda_8col("P"), es_porcentaje=True)
+            viviendas = f"{int(round(_a_numero(_celda_8col('T')))):,}"
+            casas_ftth = f"{int(round(_a_numero(_celda_8col('AB')))):,}"
+            val_y = _a_numero(_celda_8col("Y"))
+            suma_vwx = _a_numero(_celda_8col("V")) + _a_numero(_celda_8col("W")) + _a_numero(_celda_8col("X"))
+            pct_ftth = f"{(val_y / suma_vwx * 100):.1f}%" if suma_vwx > 0 else "0.0%"
+            puertos_ftth = f"{int(round(_a_numero(_celda_8col('AD')))):,}"
+            migraciones_pend = f"{int(round(suma_vwx - val_y)):,}"
+            mayor_comp = str(_celda_8col("R") or "").strip()
+            pdm_comp = _formatear_valor_abg(_celda_8col("S"), es_porcentaje=True)
+        else:
+            pdm_mty2, viviendas, casas_ftth = "23.0%", "645,992", "406,137"
+            val_y, pct_ftth, puertos_ftth, migraciones_pend = 193232, "99.0%", "117,700", "1,011"
+            mayor_comp, pdm_comp = "IZZI", "N/D"
+
+        df_inv_final = pd.DataFrame([
+            {"Concepto": "Municipios MTY 2", "Dato": "5" if muni_sel == "AREA MONTERREY 2" else "1"},
+            {"Concepto": "PDM Monterrey 2", "Dato": pdm_mty2},
+            {"Concepto": "Viviendas", "Dato": viviendas},
+            {"Concepto": "Casas pasadas FTTH", "Dato": casas_ftth},
+            {"Concepto": "INFINITUMS FTTH", "Dato": f"{int(round(val_y)):,}"},
+            {"Concepto": "% Clientes FTTH", "Dato": pct_ftth},
+            {"Concepto": "Puertos FTTH disp.", "Dato": puertos_ftth},
+            {"Concepto": "Migraciones pend.", "Dato": migraciones_pend},
+            {"Concepto": "Mercado INEGI DENUE", "Dato": f"{denue_val:,}" if denue_val else "85,355"},
+            {"Concepto": "Mayor Competidor", "Dato": mayor_comp},
+            {"Concepto": "PDM Competidor", "Dato": pdm_comp},
+        ])
+        render_tabla_compacta(df_inv_final)
+
     # --------------------------------------------------------
-    # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG + QUEJAS + INVENTARIOS + ZONAS
+    # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG + QUEJAS + TOP 3 DISTRITOS
     # --------------------------------------------------------
     with col_centro:
         df_coords = pd.DataFrame({
@@ -3801,54 +3958,28 @@ def mostrar_presentacion_ejecutiva():
                     st.markdown('<div class="titulo-bloque">🚩 Quejas por COPE</div>', unsafe_allow_html=True)
                     render_tabla_compacta(t_cope)
 
-        # Inventarios e Infraestructura + Top 3 Distritos por Zona
-        sub_inv, sub_zonas = st.columns([1.0, 1.2], gap="small")
-        with sub_inv:
-            st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
-            if archivo_inv is not None:
-                df_inv_up = pd.read_excel(archivo_inv) if archivo_inv.name.endswith("xlsx") else pd.read_csv(archivo_inv)
-                df_inv_up.columns = df_inv_up.columns.str.strip().str.upper()
-                if "MUNICIPIO" in df_inv_up.columns:
-                    df_inv_up = df_inv_up[df_inv_up["MUNICIPIO"].str.upper() == muni_sel].drop(columns=["MUNICIPIO"])
-                if not df_inv_up.empty:
-                    render_tabla_compacta(df_inv_up)
-            else:
-                df_inv_base = pd.DataFrame({
-                    "Concepto": [
-                        "Municipios MTY 2", "PDM Monterrey 2", "Viviendas",
-                        "Casas pasadas FTTH", "INFINITUMS FTTH", "% Clientes FTTH",
-                        "Puertos FTTH disp.", "Migraciones pend.", "Mercado INEGI DENUE",
-                        "Mayor Competidor"
-                    ],
-                    "Dato": [
-                        "5" if muni_sel == "AREA MONTERREY 2" else "1",
-                        "23.0%", "645,992", "406,137", "193,232",
-                        "99%", "117,700", "1,011", "85,355", "IZZI (200 MB $640)"
-                    ]
-                })
-                render_tabla_compacta(df_inv_base)
+        # Top 3 Distritos por Zona (a todo el ancho de la columna central, con columnas "distrito" y "cant")
+        if not df_q_view.empty:
+            zonas_con_datos = []
+            for z_nom in ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]:
+                sub_z = df_q_view[df_q_view["zona"] == z_nom]
+                if not sub_z.empty:
+                    top3_z = (
+                        sub_z.groupby("distrito_co").size()
+                        .sort_values(ascending=False).head(3)
+                        .rename("cant").reset_index()
+                        .rename(columns={"distrito_co": "distrito"})
+                    )
+                    top3_z["distrito"] = top3_z["distrito"].replace("", "SIN DIST.").fillna("SIN DIST.")
+                    zonas_con_datos.append((z_nom, top3_z))
 
-        with sub_zonas:
-            if not df_q_view.empty:
-                zonas_con_datos = []
-                for z_nom in ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]:
-                    sub_z = df_q_view[df_q_view["zona"] == z_nom]
-                    if not sub_z.empty:
-                        top3_z = (
-                            sub_z.groupby("distrito_co").size()
-                            .sort_values(ascending=False).head(3)
-                            .rename("FOLIOS").reset_index()
-                        )
-                        top3_z["distrito_co"] = top3_z["distrito_co"].replace("", "SIN DIST.").fillna("SIN DIST.")
-                        zonas_con_datos.append((z_nom, top3_z))
-
-                if zonas_con_datos:
-                    st.markdown('<div class="titulo-bloque">Top 3 Distritos por Zona</div>', unsafe_allow_html=True)
-                    cols_z = st.columns(len(zonas_con_datos), gap="small")
-                    for cz, (z_nom, df_z_tabla) in zip(cols_z, zonas_con_datos):
-                        with cz:
-                            st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
-                            render_tabla_compacta(df_z_tabla)
+            if zonas_con_datos:
+                st.markdown('<div class="titulo-bloque">Top 3 Distritos por Zona</div>', unsafe_allow_html=True)
+                cols_z = st.columns(len(zonas_con_datos), gap="small")
+                for cz, (z_nom, df_z_tabla) in zip(cols_z, zonas_con_datos):
+                    with cz:
+                        st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
+                        render_tabla_compacta(df_z_tabla, mini=True)
 
     # --------------------------------------------------------
     # COLUMNA DERECHA: CANAL (N:T) + BOLSA POR CANAL + BOLSA ÁREA
