@@ -13,6 +13,8 @@ import os
 import glob
 from html import escape
 from streamlit_gsheets import GSheetsConnection
+import plotly.express as px
+import json
 
 # ============================================================
 # 1. CONFIGURACIÓN PRINCIPAL DE LA PÁGINA
@@ -3330,6 +3332,302 @@ def _crear_excel_quejas(df):
     output.seek(0)
     return output.getvalue()
 
+# ============================================================
+# 5. VISTA: PRESENTACIÓN EJECUTIVA INTERACTIVA (ÁREA MTY 2)
+# ============================================================
+def mostrar_presentacion_ejecutiva():
+    # Estilos compactos tipo diapositiva ejecutiva
+    st.markdown("""
+        <style>
+            .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
+            .titulo-bloque {
+                background-color: #002060; color: white; padding: 4px 8px;
+                font-weight: bold; font-size: 13px; border-radius: 3px;
+                margin-top: 6px; margin-bottom: 4px; text-align: left;
+            }
+            .sub-bloque {
+                background-color: #1f4e78; color: white; padding: 3px 6px;
+                font-weight: bold; font-size: 11px; text-align: center;
+                border-radius: 2px; margin-bottom: 3px;
+            }
+            .kpi-mini-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+            .kpi-mini-table th { background-color: #002060; color: white; padding: 4px; text-align: center; }
+            .kpi-mini-table td { border-bottom: 1px solid #e0e0e0; padding: 3px 6px; }
+            .kpi-mini-table tr:nth-child(even) { background-color: #f4f7fa; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Mapeo oficial Municipio -> Tiendas MTY 2
+    MAPA_MUNICIPIO_TIENDAS = {
+        "GARCIA": ["SFE"],
+        "SANTA CATARINA": ["SCA"],
+        "ESCOBEDO": ["GES"],
+        "SAN NICOLAS": ["PUN"],
+        "GUADALUPE": ["GPE", "LAS"]
+    }
+
+    if "muni_activo" not in st.session_state:
+        st.session_state.muni_activo = "AREA MONTERREY 2"
+
+    # --------------------------------------------------------
+    # BARRA LATERAL: CARGA DE FUENTES COMPLEMENTARIAS
+    # --------------------------------------------------------
+    st.sidebar.header("⚙️ Fuentes de Presentación")
+    archivo_inv = st.sidebar.file_uploader(
+        "📂 Cargar Excel Inventarios / INEGI (Opcional)",
+        type=["xlsx", "csv"],
+        key="pres_inv_uploader",
+        help="Debe contener columna MUNICIPIO (GARCIA, SANTA CATARINA, ESCOBEDO, SAN NICOLAS, GUADALUPE)"
+    )
+    geojson_file = st.sidebar.file_uploader(
+        "🗺️ Cargar GeoJSON Municipios NL (Opcional)",
+        type=["json", "geojson"],
+        key="pres_geojson_uploader"
+    )
+
+    # --------------------------------------------------------
+    # ENCABEZADO DINÁMICO Y BOTÓN DE REINICIO
+    # --------------------------------------------------------
+    c_tit1, c_tit2 = st.columns([5, 1])
+    with c_tit1:
+        st.markdown(
+            f"<h2 style='text-align:center; margin:0; color:#002060;'>{st.session_state.muni_activo}</h2>",
+            unsafe_allow_html=True
+        )
+    with c_tit2:
+        if st.session_state.muni_activo != "AREA MONTERREY 2":
+            if st.button("🔄 Vista General MTY 2", use_container_width=True):
+                st.session_state.muni_activo = "AREA MONTERREY 2"
+                st.rerun()
+
+    # --------------------------------------------------------
+    # CARGA EN CACHÉ DE TUS FUENTES EN VIVO (CLARODRIVE)
+    # --------------------------------------------------------
+    @st.cache_data(ttl=600, show_spinner=False)
+    def obtener_datos_consolidados_pres():
+        # 1. BOLSA ÁREA (Reutilizando lógica de Tablero Bolsas)
+        df_bolsa_raw = pd.DataFrame()
+        url_bolsas = "https://i0000.clarodrive.com/s/KRrAxbKcriJiwcK/download"
+        try:
+            r_b = requests.get(url_bolsas, timeout=15)
+            if r_b.status_code == 200:
+                with zipfile.ZipFile(io.BytesIO(r_b.content)) as z:
+                    excels = [f for f in z.infolist() if f.filename.endswith('.xlsx') and not f.filename.startswith('~')]
+                    if excels:
+                        reciente = max(excels, key=lambda x: x.date_time)
+                        df_b = pd.read_excel(io.BytesIO(z.read(reciente.filename)), sheet_name='Detalle')
+                        df_b.columns = df_b.columns.str.strip()
+                        for col in ['ULTIMOS_6_MESES', 'ESTATUS_AGR_N2', 'ESTATUS_AGR_N1', 'ESTATUS_OS', 'CT', 'DISTRITO', 'CANAL']:
+                            if col in df_b.columns:
+                                df_b[col] = df_b[col].astype(str).str.strip().str.upper()
+                        df_b = df_b[df_b['ESTATUS_OS'] == 'PENDIENTE']
+                        dic_ct = {
+                            "CT SANTA FE [MTY]": "MONTERREY 2", "CT UNIVERSIDAD (NL)": "MONTERREY 2",
+                            "CT LA SILLA": "MONTERREY 2", "CT PUENTES": "MONTERREY 2", "CT SANTA CATARINA": "MONTERREY 2"
+                        }
+                        df_b['AREA_CORREGIDA'] = df_b['CT'].map(dic_ct)
+                        df_b = df_b[df_b['AREA_CORREGIDA'] == 'MONTERREY 2']
+                        # Asignación corta de tienda por CT para cruce directo
+                        dic_ct_tienda = {
+                            "CT SANTA FE [MTY]": "SFE", "CT UNIVERSIDAD (NL)": "GES",
+                            "CT LA SILLA": "LAS", "CT PUENTES": "PUN", "CT SANTA CATARINA": "SCA"
+                        }
+                        df_b['TIENDA_CORTA'] = df_b['CT'].map(dic_ct_tienda).fillna("GES")
+                        df_bolsa_raw = df_b
+        except Exception:
+            pass
+
+        # 2. QUEJAS (Reutilizando tus funciones exactas de Reporte Quejas)
+        df_quejas_raw = pd.DataFrame()
+        bytes_q, _, _ = obtener_archivo_clarodrive_quejas()
+        if bytes_q:
+            try:
+                df_q, _ = _cargar_datos_quejas(bytes_q)
+                df_q = _normalizar_datos_quejas(df_q)
+                df_q = _asignar_tienda_quejas(df_q)
+                df_quejas_raw = df_q
+            except Exception:
+                pass
+
+        return df_bolsa_raw, df_quejas_raw
+
+    with st.spinner("Sincronizando fuentes en vivo..."):
+        df_bolsas_mty2, df_quejas_mty2 = obtener_datos_consolidados_pres()
+
+    # Filtro activo según clic en el mapa
+    muni_sel = st.session_state.muni_activo
+    tiendas_filtradas = (
+        ["SFE", "SCA", "GES", "PUN", "GPE", "LAS"]
+        if muni_sel == "AREA MONTERREY 2"
+        else MAPA_MUNICIPIO_TIENDAS.get(muni_sel, [])
+    )
+
+    if not df_bolsas_mty2.empty:
+        df_b_view = df_bolsas_mty2[df_bolsas_mty2['TIENDA_CORTA'].isin(tiendas_filtradas)]
+    else:
+        df_b_view = pd.DataFrame()
+
+    if not df_quejas_mty2.empty:
+        df_q_view = df_quejas_mty2[df_quejas_mty2['TIENDA'].isin(tiendas_filtradas)]
+    else:
+        df_q_view = pd.DataFrame()
+
+    # ========================================================
+    # ESTRUCTURA DE 3 COLUMNAS (IDÉNTICA A TU BOCETO)
+    # ========================================================
+    col_izq, col_centro, col_der = st.columns([1.15, 1.75, 1.05], gap="small")
+
+    # --------------------------------------------------------
+    # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG Y QUEJAS
+    # --------------------------------------------------------
+    with col_centro:
+        df_coords = pd.DataFrame({
+            "MUNICIPIO": ["GARCIA", "SANTA CATARINA", "ESCOBEDO", "SAN NICOLAS", "GUADALUPE"],
+            "lat": [25.811, 25.673, 25.808, 25.741, 25.677],
+            "lon": [-100.598, -100.458, -100.326, -100.283, -100.259],
+            "Viviendas": [135000, 110000, 145000, 120000, 135992]
+        })
+
+        if geojson_file is not None:
+            geojson_nl = json.load(geojson_file)
+            fig_mapa = px.choropleth_mapbox(
+                df_coords,
+                geojson=geojson_nl,
+                locations="MUNICIPIO",
+                featureidkey="properties.NOMGEO", # Ajustar si la propiedad en tu GeoJSON se llama distinto
+                color="MUNICIPIO",
+                mapbox_style="carto-positron",
+                zoom=9.3,
+                center={"lat": 25.74, "lon": -100.42},
+                opacity=0.65,
+                height=310
+            )
+        else:
+            fig_mapa = px.scatter_mapbox(
+                df_coords,
+                lat="lat", lon="lon",
+                size="Viviendas",
+                color="MUNICIPIO",
+                hover_name="MUNICIPIO",
+                text="MUNICIPIO",
+                mapbox_style="carto-positron",
+                zoom=9.3,
+                center={"lat": 25.74, "lon": -100.42},
+                height=310
+            )
+            fig_mapa.update_traces(marker=dict(sizemin=18))
+
+        fig_mapa.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
+
+        # Detección de clic sobre municipio
+        evento = st.plotly_chart(fig_mapa, use_container_width=True, on_select="rerun", key="mapa_ejecutivo_mty2")
+        if evento and evento.selection and evento.selection.points:
+            pt = evento.selection.points[0]
+            muni_clic = pt.get("hovertext") or pt.get("location")
+            if muni_clic:
+                muni_clic = str(muni_clic).upper()
+                if muni_clic in MAPA_MUNICIPIO_TIENDAS and muni_clic != st.session_state.muni_activo:
+                    st.session_state.muni_activo = muni_clic
+                    st.rerun()
+
+        # Sub-fila inferior central: Backlog por TIENDA + Quejas por COPE
+        sub_b1, sub_b2 = st.columns([1.25, 0.95], gap="small")
+        with sub_b1:
+            st.markdown('<div class="titulo-bloque">1️⃣ Backlog por TIENDA y rango de dilación</div>', unsafe_allow_html=True)
+            if not df_q_view.empty:
+                t_backlog = _tabla_resumen_dilacion_quejas(df_q_view, "TIENDA")
+                st.dataframe(t_backlog, hide_index=True, use_container_width=True, height=220)
+            else:
+                st.info("Sin datos de backlog.")
+
+        with sub_b2:
+            st.markdown('<div class="titulo-bloque">🚩 Quejas por COPE</div>', unsafe_allow_html=True)
+            if not df_q_view.empty:
+                t_cope = (
+                    df_q_view.groupby("cope").size()
+                    .sort_values(ascending=False)
+                    .rename("FOLIOS").reset_index()
+                )
+                st.dataframe(t_cope, hide_index=True, use_container_width=True, height=220)
+            else:
+                st.info("Sin datos de COPE.")
+
+    # --------------------------------------------------------
+    # COLUMNA IZQUIERDA: RESULTADOS + INVENTARIOS + TOP DISTRITOS
+    # --------------------------------------------------------
+    with col_izq:
+        st.markdown('<div class="titulo-bloque">MONTERREY 2 — Resultados</div>', unsafe_allow_html=True)
+        # Tabla compacta de resultados (conectable a tu Google Sheet por tienda)
+        df_res_demo = pd.DataFrame({
+            "Indicador": ["Ventas", "Altas", "Bajas", "Ganancia Activa"],
+            "Cierre 2025": ["32,040", "29,932", "8,212", "5,992"],
+            "Meta 2026": ["41,206", "39,558", "6,734", "13,254"],
+            "Acum": ["34,992", "31,368", "6,152", "6,045"]
+        })
+        st.dataframe(df_res_demo, hide_index=True, use_container_width=True, height=155)
+
+        st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
+        if archivo_inv is not None:
+            df_inv_up = pd.read_excel(archivo_inv) if archivo_inv.name.endswith("xlsx") else pd.read_csv(archivo_inv)
+            df_inv_up.columns = df_inv_up.columns.str.strip().str.upper()
+            if muni_sel != "AREA MONTERREY 2" and "MUNICIPIO" in df_inv_up.columns:
+                df_inv_up = df_inv_up[df_inv_up["MUNICIPIO"].str.upper() == muni_sel]
+            st.dataframe(df_inv_up, hide_index=True, use_container_width=True, height=240)
+        else:
+            df_inv_base = pd.DataFrame({
+                "Concepto": [
+                    "Municipios MTY 2", "PDM Monterrey 2", "Viviendas",
+                    "Casas pasadas FTTH", "INFINITUMS FTTH", "% Clientes FTTH",
+                    "Puertos FTTH disp.", "Migraciones pend.", "Mercado INEGI DENUE",
+                    "Mayor Competidor"
+                ],
+                "Dato": [
+                    "5" if muni_sel == "AREA MONTERREY 2" else "1",
+                    "23.0%", "645,992", "406,137", "193,232",
+                    "99%", "117,700", "1,011", "85,355", "IZZI (200 MB $640)"
+                ]
+            })
+            st.dataframe(df_inv_base, hide_index=True, use_container_width=True, height=240)
+
+        # Top 3 Distritos por Zona (idéntico al pie izquierdo de tu boceto)
+        zonas_op = ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]
+        cols_z = st.columns(3, gap="small")
+        for cz, z_nom in zip(cols_z, zonas_op):
+            with cz:
+                st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
+                if not df_q_view.empty:
+                    sub_z = df_q_view[df_q_view["zona"] == z_nom]
+                    top3_z = (
+                        sub_z.groupby("distrito_co").size()
+                        .sort_values(ascending=False).head(3)
+                        .rename("FOLIOS").reset_index()
+                    )
+                    st.dataframe(top3_z, hide_index=True, use_container_width=True, height=125)
+
+    # --------------------------------------------------------
+    # COLUMNA DERECHA: CANAL + BOLSA ÁREA
+    # --------------------------------------------------------
+    with col_der:
+        st.markdown('<div class="titulo-bloque">CANAL</div>', unsafe_allow_html=True)
+        if not df_b_view.empty and "CANAL" in df_b_view.columns:
+            df_can = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
+            total_c = df_can["FOLIOS"].sum()
+            df_can["%"] = (df_can["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
+            st.dataframe(df_can, hide_index=True, use_container_width=True, height=230)
+        else:
+            st.info("Sin datos de canal.")
+
+        st.markdown('<div class="titulo-bloque">Bolsa Área</div>', unsafe_allow_html=True)
+        if not df_b_view.empty and "ESTATUS_AGR_N2" in df_b_view.columns:
+            df_6m_p = df_b_view[df_b_view["ULTIMOS_6_MESES"] == "SI"]
+            t_bolsa = (
+                df_6m_p.groupby("ESTATUS_AGR_N2").size()
+                .rename("Total").reset_index()
+                .rename(columns={"ESTATUS_AGR_N2": "ESTATUS_AGR"})
+            )
+            st.dataframe(t_bolsa, hide_index=True, use_container_width=True, height=310)
+        else:
+            st.info("Sin datos de bolsa.")
 
 # ============================================================
 # 6. RUTEO PRINCIPAL
@@ -3346,3 +3644,6 @@ elif seleccion == "Tablero Bolsas":
 
 elif seleccion == "Reporte Quejas":
     mostrar_reporte_quejas()
+
+if seleccion == "Presentacion Ejecutiva":
+    mostrar_presentacion_ejecutiva()
