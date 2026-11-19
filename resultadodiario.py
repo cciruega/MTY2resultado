@@ -152,15 +152,27 @@ st.title("Monterrey (Seguimiento y Reportes)")
 
 seleccion = option_menu(
     menu_title=None, 
-    options=["Resultados Diarios", "Reporte Telcel", "Tablero Bolsas", "Reporte Quejas"],
-    icons=["bar-chart-line", "phone", "briefcase", "exclamation-diamond"], 
+    options=[
+        "Resultados Diarios", 
+        "Reporte Telcel", 
+        "Tablero Bolsas", 
+        "Reporte Quejas", 
+        "Presentacion Ejecutiva"
+    ],
+    icons=[
+        "bar-chart-line", 
+        "phone", 
+        "briefcase", 
+        "exclamation-diamond", 
+        "easel"
+    ], 
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
     styles={
         "container": {"padding": "0!important", "background-color": "#fafafa"},
         "icon": {"color": "orange", "font-size": "18px"}, 
-        "nav-link": {"font-size": "16px", "text-align": "center", "margin":"0px", "--hover-color": "#eee"},
+        "nav-link": {"font-size": "15px", "text-align": "center", "margin":"0px", "--hover-color": "#eee"},
         "nav-link-selected": {"background-color": "#024B7A"}, 
     }
 )
@@ -3645,5 +3657,5 @@ elif seleccion == "Tablero Bolsas":
 elif seleccion == "Reporte Quejas":
     mostrar_reporte_quejas()
 
-if seleccion == "Presentacion Ejecutiva":
+elif seleccion == "Presentacion Ejecutiva":
     mostrar_presentacion_ejecutiva()
