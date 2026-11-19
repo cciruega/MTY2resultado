@@ -3384,7 +3384,6 @@ def mostrar_presentacion_ejecutiva():
         </style>
     """, unsafe_allow_html=True)
 
-    # Función auxiliar para renderizar tablas autoajustadas al texto y sin scroll
     def render_tabla_compacta(df_in, cols_izq=None):
         if df_in is None or df_in.empty:
             return
@@ -3414,6 +3413,15 @@ def mostrar_presentacion_ejecutiva():
         "ESCOBEDO": ["GES"],
         "SAN NICOLAS": ["PUN"],
         "GUADALUPE": ["GPE", "LAS"]
+    }
+
+    MAPA_MUNI_ARCHIVO_ABG = {
+        "AREA MONTERREY 2": "ABG AREA",
+        "ESCOBEDO": "ABG MUNICIPIO GES",
+        "GUADALUPE": "ABG MUNICIPIO GPE",
+        "SANTA CATARINA": "ABG MUNICIPIO SCA",
+        "SAN NICOLAS": "ABG MUNICIPIO SNI",
+        "GARCIA": "ABG MUNICIPIO VGA",
     }
 
     if "muni_activo" not in st.session_state:
@@ -3451,7 +3459,75 @@ def mostrar_presentacion_ejecutiva():
                 st.rerun()
 
     # --------------------------------------------------------
-    # CARGA EN CACHÉ DE TUS FUENTES EN VIVO (CLARODRIVE)
+    # LECTURA DE ARCHIVOS ABG (CLARODRIVE)
+    # --------------------------------------------------------
+    def _col_excel_a_idx(col_str):
+        idx = 0
+        for ch in col_str.upper():
+            idx = idx * 26 + (ord(ch) - ord("A") + 1)
+        return idx - 1
+
+    def _formatear_valor_abg(val, es_porcentaje=False):
+        if pd.isna(val) or str(val).strip() == "":
+            return "0%" if es_porcentaje else "0"
+        if isinstance(val, str):
+            s = val.strip()
+            if "%" in s:
+                return s
+            try:
+                num = float(s.replace(",", ""))
+            except ValueError:
+                return s
+        else:
+            num = float(val)
+
+        if es_porcentaje:
+            # Si Excel guarda 15% como 0.15 o como 15.0
+            if -2.0 <= num <= 2.0 and num != 0:
+                return f"{num * 100:,.1f}%"
+            return f"{num:,.1f}%"
+        return f"{int(round(num)):,}"
+
+    @st.cache_data(ttl=600, show_spinner=False)
+    def obtener_datos_abg_clarodrive():
+        url_abg = "https://i0000.clarodrive.com/s/LRA8fWmQ9SBeLNx/download"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        datos_por_clave = {}
+        try:
+            resp = requests.get(url_abg, headers=headers, timeout=20)
+            resp.raise_for_status()
+            with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+                for info in z.infolist():
+                    if info.is_dir() or not info.filename.lower().endswith((".xlsx", ".xls")):
+                        continue
+                    base_name = os.path.basename(info.filename)
+                    if base_name.startswith("~"):
+                        continue
+                    nombre_limpio = os.path.splitext(base_name)[0].upper().strip()
+                    for clave_buscada in MAPA_MUNI_ARCHIVO_ABG.values():
+                        if clave_buscada in nombre_limpio:
+                            raw_bytes = z.read(info.filename)
+                            df_raw = pd.read_excel(io.BytesIO(raw_bytes), header=None)
+                            # Detectar fila de encabezados (fila 0 o fila 1 si hay banner superior)
+                            header_row = 0
+                            if len(df_raw) > 2:
+                                fila0_txt = " ".join(df_raw.iloc[0].fillna("").astype(str)).upper()
+                                fila1_txt = " ".join(df_raw.iloc[1].fillna("").astype(str)).upper()
+                                if "VENTA" not in fila0_txt and "VENTA" in fila1_txt:
+                                    header_row = 1
+                            if len(df_raw) > header_row + 1:
+                                titulos = df_raw.iloc[header_row].tolist()
+                                valores = df_raw.iloc[header_row + 1].tolist()
+                                datos_por_clave[clave_buscada] = {
+                                    "titulos": titulos,
+                                    "valores": valores
+                                }
+        except Exception:
+            pass
+        return datos_por_clave
+
+    # --------------------------------------------------------
+    # CARGA EN CACHÉ DE BOLSAS Y QUEJAS EN VIVO (CLARODRIVE)
     # --------------------------------------------------------
     @st.cache_data(ttl=600, show_spinner=False)
     def obtener_datos_consolidados_pres():
@@ -3500,8 +3576,21 @@ def mostrar_presentacion_ejecutiva():
 
     with st.spinner("Sincronizando fuentes en vivo..."):
         df_bolsas_mty2, df_quejas_mty2 = obtener_datos_consolidados_pres()
+        datos_abg_todos = obtener_datos_abg_clarodrive()
 
     muni_sel = st.session_state.muni_activo
+    clave_abg_actual = MAPA_MUNI_ARCHIVO_ABG.get(muni_sel, "ABG AREA")
+    info_abg = datos_abg_todos.get(clave_abg_actual)
+
+    def _leer_abg_col(col_letra, es_pct=False):
+        if not info_abg:
+            return "0%" if es_pct else "0"
+        idx = _col_excel_a_idx(col_letra)
+        vals = info_abg["valores"]
+        if idx < len(vals):
+            return _formatear_valor_abg(vals[idx], es_porcentaje=es_pct)
+        return "0%" if es_pct else "0"
+
     tiendas_filtradas = (
         ["SFE", "SCA", "GES", "PUN", "GPE", "LAS"]
         if muni_sel == "AREA MONTERREY 2"
@@ -3520,10 +3609,62 @@ def mostrar_presentacion_ejecutiva():
     # ========================================================
     # ESTRUCTURA DE 3 COLUMNAS
     # ========================================================
-    col_izq, col_centro, col_der = st.columns([1.2, 1.7, 1.1], gap="small")
+    col_izq, col_centro, col_der = st.columns([1.25, 1.65, 1.1], gap="small")
 
     # --------------------------------------------------------
-    # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG Y QUEJAS
+    # COLUMNA IZQUIERDA: RESULTADOS + CLASE + PORTA + BAJAS + INV + ZONAS
+    # --------------------------------------------------------
+    with col_izq:
+        # 1. RESULTADOS (Cols H:L y AD:AG)
+        st.markdown(f'<div class="titulo-bloque">{muni_sel} — Resultados</div>', unsafe_allow_html=True)
+        df_resultados_abg = pd.DataFrame([
+            {"Concepto": "Cierre Mes Venta", "Valor": _leer_abg_col("H")},
+            {"Concepto": "Cierre Mes Ant Venta", "Valor": _leer_abg_col("I")},
+            {"Concepto": "Cierre Act vs Cierre Ant Ventas", "Valor": _leer_abg_col("J", es_pct=True)},
+            {"Concepto": "Año Act Venta", "Valor": _leer_abg_col("K")},
+            {"Concepto": "Año Ant Venta", "Valor": _leer_abg_col("L")},
+            {"Concepto": "Mes Act Alta", "Valor": _leer_abg_col("AD")},
+            {"Concepto": "Mes Act Aa Alta", "Valor": _leer_abg_col("AE")},
+            {"Concepto": "Mes Ant Alta", "Valor": _leer_abg_col("AF")},
+            {"Concepto": "Mes Act vs Mes Ant Alta", "Valor": _leer_abg_col("AG", es_pct=True)},
+        ])
+        render_tabla_compacta(df_resultados_abg)
+
+        # 2. VENTA POR CLASE (Cols U:V) y PORTABILIDAD (Cols W:Y) en dos subcolumnas compactas
+        sub_c1, sub_c2 = st.columns(2, gap="small")
+        with sub_c1:
+            st.markdown('<div class="titulo-bloque">Venta por Clase</div>', unsafe_allow_html=True)
+            df_clase = pd.DataFrame([
+                {"Clase": "Comerciales", "Mes": _leer_abg_col("U")},
+                {"Clase": "Residenciales", "Mes": _leer_abg_col("V")},
+            ])
+            render_tabla_compacta(df_clase)
+
+        with sub_c2:
+            st.markdown('<div class="titulo-bloque">Portabilidad</div>', unsafe_allow_html=True)
+            df_porta = pd.DataFrame([
+                {"Concepto": "Mes Act Porta", "Dato": _leer_abg_col("W")},
+                {"Concepto": "Mes Act Donado", "Dato": _leer_abg_col("X")},
+                {"Concepto": "Relacion Mes Porta", "Dato": _leer_abg_col("Y", es_pct=True)},
+            ])
+            render_tabla_compacta(df_porta)
+
+        # 3. BAJAS (Cols AP:AT y AX:AZ)
+        st.markdown('<div class="titulo-bloque">Bajas</div>', unsafe_allow_html=True)
+        df_bajas = pd.DataFrame([
+            {"Concepto": "Mes Act Baja", "Valor": _leer_abg_col("AP")},
+            {"Concepto": "Mes Act Aa Baja", "Valor": _leer_abg_col("AQ")},
+            {"Concepto": "Mes Ant Baja", "Valor": _leer_abg_col("AR")},
+            {"Concepto": "Mes Act vs Mes Ant Baja", "Valor": _leer_abg_col("AS", es_pct=True)},
+            {"Concepto": "Mes Act vs Mismo Mes AA Baja", "Valor": _leer_abg_col("AT", es_pct=True)},
+            {"Concepto": "Año Act Baja", "Valor": _leer_abg_col("AX")},
+            {"Concepto": "Año Ant Baja", "Valor": _leer_abg_col("AY")},
+            {"Concepto": "Año Act vs Año Ant Baja", "Valor": _leer_abg_col("AZ", es_pct=True)},
+        ])
+        render_tabla_compacta(df_bajas)
+
+    # --------------------------------------------------------
+    # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG + QUEJAS + INVENTARIOS + ZONAS
     # --------------------------------------------------------
     with col_centro:
         df_coords = pd.DataFrame({
@@ -3534,7 +3675,6 @@ def mostrar_presentacion_ejecutiva():
             "Viviendas": [135000, 110000, 145000, 120000, 135992]
         })
 
-        # 1. Leer GeoJSON desde uploader manual o automáticamente desde el repositorio (19mun.json)
         geojson_nl = None
         ruta_repo_geojson = os.path.join(os.path.dirname(os.path.abspath(__file__)), "19mun.json")
 
@@ -3554,8 +3694,33 @@ def mostrar_presentacion_ejecutiva():
             mapa_cve_nombre = dict(zip(df_coords["CVE_MUN"], df_coords["MUNICIPIO"]))
             features_filtradas = []
 
+            centros_ref = {
+                "GARCIA": (-100.58, 25.82),
+                "SANTA CATARINA": (-100.46, 25.62),
+                "ESCOBEDO": (-100.33, 25.81),
+                "SAN NICOLAS": (-100.28, 25.74),
+                "GUADALUPE": (-100.22, 25.67),
+            }
+
+            def _centro_poligono(geom):
+                coords = []
+                def _extraer(arr):
+                    if arr and isinstance(arr[0], (int, float)):
+                        coords.append(arr)
+                    else:
+                        for item in arr:
+                            _extraer(item)
+                _extraer(geom.get("coordinates", []))
+                if not coords:
+                    return None
+                lons = [c[0] for c in coords]
+                lats = [c[1] for c in coords]
+                return ((min(lons) + max(lons)) / 2, (min(lats) + max(lats)) / 2)
+
             for feature in geojson_nl.get("features", []):
-                props = feature.get("properties", {})
+                props = feature.get("properties") or {}
+                feature["properties"] = props
+
                 cve = str(props.get("CVE_MUN", "")).zfill(3)
                 nom = str(props.get("NOMGEO") or props.get("NOM_MUN") or props.get("name") or "").upper().strip()
                 for k, v in reemplazos.items():
@@ -3567,6 +3732,14 @@ def mostrar_presentacion_ejecutiva():
                 elif nom in MAPA_MUNICIPIO_TIENDAS:
                     props["MUNI_KEY"] = nom
                     features_filtradas.append(feature)
+                elif not props:
+                    centro = _centro_poligono(feature.get("geometry", {}))
+                    if centro:
+                        for m_nom, (rlon, rlat) in centros_ref.items():
+                            if abs(centro[0] - rlon) < 0.045 and abs(centro[1] - rlat) < 0.045:
+                                props["MUNI_KEY"] = m_nom
+                                features_filtradas.append(feature)
+                                break
 
             geojson_mty2 = {"type": "FeatureCollection", "features": features_filtradas}
 
@@ -3584,7 +3757,6 @@ def mostrar_presentacion_ejecutiva():
                 height=310
             )
         else:
-            st.warning("⚠️ No se encontró '19mun.json' en la carpeta del script.")
             fig_mapa = px.scatter_map(
                 df_coords,
                 lat="lat", lon="lon",
@@ -3611,7 +3783,7 @@ def mostrar_presentacion_ejecutiva():
                     st.session_state.muni_activo = muni_clic
                     st.rerun()
 
-        # Sub-fila inferior central: Backlog por TIENDA + Quejas por COPE (autoajustadas y ocultables)
+        # Backlog por TIENDA + Quejas por COPE
         t_backlog = _tabla_resumen_dilacion_quejas(df_q_view, "TIENDA") if not df_q_view.empty else pd.DataFrame()
         t_cope = (
             df_q_view.groupby("cope").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
@@ -3629,76 +3801,100 @@ def mostrar_presentacion_ejecutiva():
                     st.markdown('<div class="titulo-bloque">🚩 Quejas por COPE</div>', unsafe_allow_html=True)
                     render_tabla_compacta(t_cope)
 
-    # --------------------------------------------------------
-    # COLUMNA IZQUIERDA: RESULTADOS + INVENTARIOS + TOP DISTRITOS
-    # --------------------------------------------------------
-    with col_izq:
-        st.markdown(f'<div class="titulo-bloque">{muni_sel} — Resultados</div>', unsafe_allow_html=True)
-        df_res_demo = pd.DataFrame({
-            "Indicador": ["Ventas", "Altas", "Bajas", "Ganancia Activa"],
-            "Cierre 2025": ["32,040", "29,932", "8,212", "5,992"],
-            "Meta 2026": ["41,206", "39,558", "6,734", "13,254"],
-            "Acum": ["34,992", "31,368", "6,152", "6,045"]
-        })
-        render_tabla_compacta(df_res_demo)
+        # Inventarios e Infraestructura + Top 3 Distritos por Zona
+        sub_inv, sub_zonas = st.columns([1.0, 1.2], gap="small")
+        with sub_inv:
+            st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
+            if archivo_inv is not None:
+                df_inv_up = pd.read_excel(archivo_inv) if archivo_inv.name.endswith("xlsx") else pd.read_csv(archivo_inv)
+                df_inv_up.columns = df_inv_up.columns.str.strip().str.upper()
+                if "MUNICIPIO" in df_inv_up.columns:
+                    df_inv_up = df_inv_up[df_inv_up["MUNICIPIO"].str.upper() == muni_sel].drop(columns=["MUNICIPIO"])
+                if not df_inv_up.empty:
+                    render_tabla_compacta(df_inv_up)
+            else:
+                df_inv_base = pd.DataFrame({
+                    "Concepto": [
+                        "Municipios MTY 2", "PDM Monterrey 2", "Viviendas",
+                        "Casas pasadas FTTH", "INFINITUMS FTTH", "% Clientes FTTH",
+                        "Puertos FTTH disp.", "Migraciones pend.", "Mercado INEGI DENUE",
+                        "Mayor Competidor"
+                    ],
+                    "Dato": [
+                        "5" if muni_sel == "AREA MONTERREY 2" else "1",
+                        "23.0%", "645,992", "406,137", "193,232",
+                        "99%", "117,700", "1,011", "85,355", "IZZI (200 MB $640)"
+                    ]
+                })
+                render_tabla_compacta(df_inv_base)
 
-        st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
-        if archivo_inv is not None:
-            df_inv_up = pd.read_excel(archivo_inv) if archivo_inv.name.endswith("xlsx") else pd.read_csv(archivo_inv)
-            df_inv_up.columns = df_inv_up.columns.str.strip().str.upper()
-            if "MUNICIPIO" in df_inv_up.columns:
-                df_inv_up = df_inv_up[df_inv_up["MUNICIPIO"].str.upper() == muni_sel].drop(columns=["MUNICIPIO"])
-            if not df_inv_up.empty:
-                render_tabla_compacta(df_inv_up)
-        else:
-            df_inv_base = pd.DataFrame({
-                "Concepto": [
-                    "Municipios MTY 2", "PDM Monterrey 2", "Viviendas",
-                    "Casas pasadas FTTH", "INFINITUMS FTTH", "% Clientes FTTH",
-                    "Puertos FTTH disp.", "Migraciones pend.", "Mercado INEGI DENUE",
-                    "Mayor Competidor"
-                ],
-                "Dato": [
-                    "5" if muni_sel == "AREA MONTERREY 2" else "1",
-                    "23.0%", "645,992", "406,137", "193,232",
-                    "99%", "117,700", "1,011", "85,355", "IZZI (200 MB $640)"
-                ]
-            })
-            render_tabla_compacta(df_inv_base)
+        with sub_zonas:
+            if not df_q_view.empty:
+                zonas_con_datos = []
+                for z_nom in ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]:
+                    sub_z = df_q_view[df_q_view["zona"] == z_nom]
+                    if not sub_z.empty:
+                        top3_z = (
+                            sub_z.groupby("distrito_co").size()
+                            .sort_values(ascending=False).head(3)
+                            .rename("FOLIOS").reset_index()
+                        )
+                        top3_z["distrito_co"] = top3_z["distrito_co"].replace("", "SIN DIST.").fillna("SIN DIST.")
+                        zonas_con_datos.append((z_nom, top3_z))
 
-        # Top 3 Distritos por Zona: SOLO se renderizan las zonas que tienen datos
-        if not df_q_view.empty:
-            zonas_con_datos = []
-            for z_nom in ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]:
-                sub_z = df_q_view[df_q_view["zona"] == z_nom]
-                if not sub_z.empty:
-                    top3_z = (
-                        sub_z.groupby("distrito_co").size()
-                        .sort_values(ascending=False).head(3)
-                        .rename("FOLIOS").reset_index()
-                    )
-                    top3_z["distrito_co"] = top3_z["distrito_co"].replace("", "SIN DIST.").fillna("SIN DIST.")
-                    zonas_con_datos.append((z_nom, top3_z))
-
-            if zonas_con_datos:
-                cols_z = st.columns(len(zonas_con_datos), gap="small")
-                for cz, (z_nom, df_z_tabla) in zip(cols_z, zonas_con_datos):
-                    with cz:
-                        st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
-                        render_tabla_compacta(df_z_tabla)
+                if zonas_con_datos:
+                    st.markdown('<div class="titulo-bloque">Top 3 Distritos por Zona</div>', unsafe_allow_html=True)
+                    cols_z = st.columns(len(zonas_con_datos), gap="small")
+                    for cz, (z_nom, df_z_tabla) in zip(cols_z, zonas_con_datos):
+                        with cz:
+                            st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
+                            render_tabla_compacta(df_z_tabla)
 
     # --------------------------------------------------------
-    # COLUMNA DERECHA: CANAL + BOLSA ÁREA
+    # COLUMNA DERECHA: CANAL (N:T) + BOLSA POR CANAL + BOLSA ÁREA
     # --------------------------------------------------------
     with col_der:
-        if not df_b_view.empty and "CANAL" in df_b_view.columns:
-            df_can = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
-            if not df_can.empty:
-                st.markdown('<div class="titulo-bloque">CANAL</div>', unsafe_allow_html=True)
-                total_c = df_can["FOLIOS"].sum()
-                df_can["%"] = (df_can["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
-                render_tabla_compacta(df_can)
+        # 1. CANAL — Resultado por Canal de Venta (Cols N:T)
+        st.markdown('<div class="titulo-bloque">CANAL (Venta del Mes)</div>', unsafe_allow_html=True)
+        canales_abg_cols = [
+            ("Fielders Mes", "N"),
+            ("Telmex Mes", "O"),
+            ("Cat Mes", "P"),
+            ("T2P Mes", "Q"),
+            ("Call Center Mes", "R"),
+            ("Ceico Mes", "S"),
+            ("Otros Mes", "T"),
+        ]
+        filas_canal_venta = []
+        total_canal_venta = 0.0
+        for etiqueta, col_l in canales_abg_cols:
+            raw_v = 0.0
+            if info_abg:
+                idx = _col_excel_a_idx(col_l)
+                if idx < len(info_abg["valores"]) and pd.notna(info_abg["valores"][idx]):
+                    try:
+                        raw_v = float(str(info_abg["valores"][idx]).replace(",", ""))
+                    except ValueError:
+                        raw_v = 0.0
+            total_canal_venta += raw_v
+            filas_canal_venta.append({"Canal": etiqueta, "Ventas": int(round(raw_v)), "_raw": raw_v})
 
+        df_canal_venta = pd.DataFrame(filas_canal_venta)
+        df_canal_venta["%"] = df_canal_venta["_raw"].apply(
+            lambda x: f"{(x / total_canal_venta * 100):.0f}%" if total_canal_venta > 0 else "0%"
+        )
+        render_tabla_compacta(df_canal_venta[["Canal", "Ventas", "%"]])
+
+        # 2. BOLSA POR CANAL (Posición inferior)
+        if not df_b_view.empty and "CANAL" in df_b_view.columns:
+            df_can_bolsa = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
+            if not df_can_bolsa.empty:
+                st.markdown('<div class="titulo-bloque">Bolsa por Canal</div>', unsafe_allow_html=True)
+                total_c = df_can_bolsa["FOLIOS"].sum()
+                df_can_bolsa["%"] = (df_can_bolsa["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
+                render_tabla_compacta(df_can_bolsa)
+
+        # 3. BOLSA ÁREA
         if not df_b_view.empty and "ESTATUS_AGR_N2" in df_b_view.columns:
             df_6m_p = df_b_view[df_b_view["ULTIMOS_6_MESES"] == "SI"]
             t_bolsa = (
@@ -3709,6 +3905,74 @@ def mostrar_presentacion_ejecutiva():
             if not t_bolsa.empty:
                 st.markdown('<div class="titulo-bloque">Bolsa Área</div>', unsafe_allow_html=True)
                 render_tabla_compacta(t_bolsa)
+
+    # ========================================================
+    # SECCIÓN INFERIOR: GRÁFICA GANANCIA (BC:BK) + RESUMEN ANUAL (BA:BB)
+    # ========================================================
+    st.markdown("---")
+    col_graf_gan, col_res_gan = st.columns([3.2, 1.0], gap="medium")
+
+    with col_graf_gan:
+        st.markdown(f'<div class="titulo-bloque">Ganancia Mensual — {muni_sel}</div>', unsafe_allow_html=True)
+        cols_ganancia = ["BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK"]
+        nombres_default = [
+            "Enero Ganancia", "Febrero Ganancia", "Marzo Ganancia",
+            "Abril Ganancia", "Mayo Ganancia", "Junio Ganancia",
+            "Julio Ganancia", "Agosto Ganancia", "Octubre Ganancia"
+        ]
+        datos_graf = []
+        for i, col_l in enumerate(cols_ganancia):
+            idx = _col_excel_a_idx(col_l)
+            etiqueta_mes = nombres_default[i]
+            valor_num = 0.0
+            if info_abg:
+                if idx < len(info_abg["titulos"]) and pd.notna(info_abg["titulos"][idx]):
+                    t_str = str(info_abg["titulos"][idx]).strip()
+                    if t_str:
+                        etiqueta_mes = t_str
+                if idx < len(info_abg["valores"]) and pd.notna(info_abg["valores"][idx]):
+                    try:
+                        valor_num = float(str(info_abg["valores"][idx]).replace(",", ""))
+                    except ValueError:
+                        valor_num = 0.0
+            datos_graf.append({
+                "Mes": etiqueta_mes,
+                "Ganancia": int(round(valor_num)),
+                "Etiqueta": f"{int(round(valor_num)):,}"
+            })
+
+        df_ganancia_graf = pd.DataFrame(datos_graf)
+        fig_gan = px.line(
+            df_ganancia_graf,
+            x="Mes",
+            y="Ganancia",
+            text="Etiqueta",
+            markers=True,
+            height=260
+        )
+        fig_gan.update_traces(
+            line=dict(color="#156082", width=3),
+            marker=dict(size=8, color="#156082"),
+            textposition="middle right",
+            textfont=dict(size=11, color="#333333")
+        )
+        fig_gan.update_layout(
+            margin=dict(l=10, r=35, t=15, b=10),
+            xaxis_title=None,
+            yaxis_title=None,
+            plot_bgcolor="white",
+            yaxis=dict(gridcolor="#e0e0e0", zeroline=True, zerolinecolor="#999999"),
+            xaxis=dict(showgrid=False)
+        )
+        st.plotly_chart(fig_gan, width="stretch", key="grafica_ganancia_mty2")
+
+    with col_res_gan:
+        st.markdown('<div class="titulo-bloque">Ganancia Acumulada</div>', unsafe_allow_html=True)
+        df_gan_anual = pd.DataFrame([
+            {"Concepto": "Año Act Ganancia", "Valor": _leer_abg_col("BA")},
+            {"Concepto": "Año Ant Ganancia", "Valor": _leer_abg_col("BB")},
+        ])
+        render_tabla_compacta(df_gan_anual)
 # ============================================================
 # 6. RUTEO PRINCIPAL
 # ============================================================
