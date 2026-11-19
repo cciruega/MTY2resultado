@@ -3502,42 +3502,58 @@ def mostrar_presentacion_ejecutiva():
 
         if geojson_file is not None:
             geojson_nl = json.load(geojson_file)
-            fig_mapa = px.choropleth_mapbox(
+            reemplazos = {
+                "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U",
+                "GENERAL ESCOBEDO": "ESCOBEDO",
+                "SAN NICOLAS DE LOS GARZA": "SAN NICOLAS"
+            }
+            for feature in geojson_nl.get("features", []):
+                props = feature.get("properties", {})
+                nom = str(props.get("NOMGEO") or props.get("NOM_MUN") or props.get("name") or "").upper().strip()
+                for k, v in reemplazos.items():
+                    nom = nom.replace(k, v)
+                props["MUNI_KEY"] = nom
+
+            fig_mapa = px.choropleth_map(
                 df_coords,
                 geojson=geojson_nl,
                 locations="MUNICIPIO",
-                featureidkey="properties.NOMGEO", # Ajustar si la propiedad en tu GeoJSON se llama distinto
+                featureidkey="properties.MUNI_KEY",
                 color="MUNICIPIO",
-                mapbox_style="carto-positron",
+                map_style="carto-positron",
                 zoom=9.3,
                 center={"lat": 25.74, "lon": -100.42},
                 opacity=0.65,
                 height=310
             )
         else:
-            fig_mapa = px.scatter_mapbox(
+            fig_mapa = px.scatter_map(
                 df_coords,
                 lat="lat", lon="lon",
                 size="Viviendas",
                 color="MUNICIPIO",
                 hover_name="MUNICIPIO",
                 text="MUNICIPIO",
-                mapbox_style="carto-positron",
+                map_style="carto-positron",
                 zoom=9.3,
                 center={"lat": 25.74, "lon": -100.42},
                 height=310
             )
             fig_mapa.update_traces(marker=dict(sizemin=18))
 
-        fig_mapa.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
+        fig_mapa.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            clickmode="event+select"
+        )
 
         # Detección de clic sobre municipio
-        evento = st.plotly_chart(fig_mapa, use_container_width=True, on_select="rerun", key="mapa_ejecutivo_mty2")
-        if evento and evento.selection and evento.selection.points:
-            pt = evento.selection.points[0]
-            muni_clic = pt.get("hovertext") or pt.get("location")
+        evento = st.plotly_chart(fig_mapa, width="stretch", on_select="rerun", key="mapa_ejecutivo_mty2")
+        if evento and getattr(evento, "selection", None) and evento.selection.get("points"):
+            pt = evento.selection["points"][0]
+            muni_clic = pt.get("hovertext") or pt.get("location") or pt.get("text")
             if muni_clic:
-                muni_clic = str(muni_clic).upper()
+                muni_clic = str(muni_clic).upper().strip()
                 if muni_clic in MAPA_MUNICIPIO_TIENDAS and muni_clic != st.session_state.muni_activo:
                     st.session_state.muni_activo = muni_clic
                     st.rerun()
