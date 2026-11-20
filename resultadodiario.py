@@ -3470,13 +3470,13 @@ def mostrar_presentacion_ejecutiva():
     # --------------------------------------------------------
     # ENCABEZADO DINÁMICO Y BOTÓN DE REINICIO
     # --------------------------------------------------------
-    c_tit1, c_tit2 = st.columns([5, 1])
-    with c_tit1:
+    c_espacio, c_tit, c_btn = st.columns([1, 4, 1], vertical_alignment="center")
+    with c_tit:
         st.markdown(
-            f"<h2 style='text-align:center; margin:0; color:#002060;'>{st.session_state.muni_activo}</h2>",
+            f"<h2 style='text-align:center; margin:0; color:#002060; width:100%;'>{st.session_state.muni_activo}</h2>",
             unsafe_allow_html=True
         )
-    with c_tit2:
+    with c_btn:
         if st.session_state.muni_activo != "AREA MONTERREY 2":
             if st.button("🔄 Vista General MTY 2", width="stretch"):
                 st.session_state.muni_activo = "AREA MONTERREY 2"
