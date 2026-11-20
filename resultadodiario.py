@@ -3431,7 +3431,6 @@ def mostrar_presentacion_ejecutiva():
         "GARCIA": "ABG MUNICIPIO VGA",
     }
 
-    # Fila en Excel (1-indexed) dentro de "Reporte 8 Columnas"
     MAPA_MUNI_FILA_8COL = {
         "AREA MONTERREY 2": 31,
         "GUADALUPE": 44,
@@ -3441,7 +3440,6 @@ def mostrar_presentacion_ejecutiva():
         "SANTA CATARINA": 50,
     }
 
-    # Clave INEGI en "nuevo-leon-municipios.csv"
     MAPA_MUNI_CLAVE_DENUE = {
         "GARCIA": "19018",
         "ESCOBEDO": "19021",
@@ -3571,7 +3569,6 @@ def mostrar_presentacion_ejecutiva():
             return pd.read_excel(archivo_8col_manual, header=None)
         if bytes_cd is not None:
             return pd.read_excel(io.BytesIO(bytes_cd), header=None)
-        # Buscar en la carpeta del repositorio Git si empieza con "Reporte 8 Columnas"
         for archivo in os.listdir(dir_actual):
             if archivo.upper().startswith("REPORTE 8 COLUMNAS") and archivo.lower().endswith((".xlsx", ".xls")):
                 return pd.read_excel(os.path.join(dir_actual, archivo), header=None)
@@ -3591,7 +3588,6 @@ def mostrar_presentacion_ejecutiva():
         if df_d is None or df_d.empty or len(df_d.columns) < 3:
             return {}
 
-        # Identificar columna de establecimientos (3ra columna o por nombre)
         col_est = df_d.columns[2]
         for c in df_d.columns:
             if "ESTABLECIMIENTO" in str(c).upper():
@@ -3718,7 +3714,8 @@ def mostrar_presentacion_ejecutiva():
     col_izq, col_centro, col_der = st.columns([1.25, 1.65, 1.1], gap="small")
 
     # --------------------------------------------------------
-    # COLUMNA IZQUIERDA: RESULTADOS + CLASE + PORTA + BAJAS + INVENTARIOS
+    # COLUMNA IZQUIERDA:
+    # 1. Resultados -> 2. Inventarios -> 3. Venta por Clase / Portabilidad -> 4. Bajas
     # --------------------------------------------------------
     with col_izq:
         # 1. RESULTADOS (Cols H:L y AD:AG)
@@ -3736,40 +3733,7 @@ def mostrar_presentacion_ejecutiva():
         ])
         render_tabla_compacta(df_resultados_abg)
 
-        # 2. VENTA POR CLASE (Cols U:V) y PORTABILIDAD (Cols W:Y)
-        sub_c1, sub_c2 = st.columns(2, gap="small")
-        with sub_c1:
-            st.markdown('<div class="titulo-bloque">Venta por Clase</div>', unsafe_allow_html=True)
-            df_clase = pd.DataFrame([
-                {"Clase": "Comerciales", "Mes": _leer_abg_col("U")},
-                {"Clase": "Residenciales", "Mes": _leer_abg_col("V")},
-            ])
-            render_tabla_compacta(df_clase)
-
-        with sub_c2:
-            st.markdown('<div class="titulo-bloque">Portabilidad</div>', unsafe_allow_html=True)
-            df_porta = pd.DataFrame([
-                {"Concepto": "Mes Act Porta", "Dato": _leer_abg_col("W")},
-                {"Concepto": "Mes Act Donado", "Dato": _leer_abg_col("X")},
-                {"Concepto": "Relacion Mes Porta", "Dato": _leer_abg_col("Y", es_pct=True)},
-            ])
-            render_tabla_compacta(df_porta)
-
-        # 3. BAJAS (Cols AP:AT y AX:AZ)
-        st.markdown('<div class="titulo-bloque">Bajas</div>', unsafe_allow_html=True)
-        df_bajas = pd.DataFrame([
-            {"Concepto": "Mes Act Baja", "Valor": _leer_abg_col("AP")},
-            {"Concepto": "Mes Act Aa Baja", "Valor": _leer_abg_col("AQ")},
-            {"Concepto": "Mes Ant Baja", "Valor": _leer_abg_col("AR")},
-            {"Concepto": "Mes Act vs Mes Ant Baja", "Valor": _leer_abg_col("AS", es_pct=True)},
-            {"Concepto": "Mes Act vs Mismo Mes AA Baja", "Valor": _leer_abg_col("AT", es_pct=True)},
-            {"Concepto": "Año Act Baja", "Valor": _leer_abg_col("AX")},
-            {"Concepto": "Año Ant Baja", "Valor": _leer_abg_col("AY")},
-            {"Concepto": "Año Act vs Año Ant Baja", "Valor": _leer_abg_col("AZ", es_pct=True)},
-        ])
-        render_tabla_compacta(df_bajas)
-
-        # 4. INVENTARIOS E INFRAESTRUCTURA ("Reporte 8 Columnas" + "nuevo-leon-municipios.csv")
+        # 2. INVENTARIOS E INFRAESTRUCTURA (Justo debajo de Resultados)
         st.markdown('<div class="titulo-bloque">Inventarios e Infraestructura</div>', unsafe_allow_html=True)
         fila_excel_1idx = MAPA_MUNI_FILA_8COL.get(muni_sel, 31)
         fila_idx = fila_excel_1idx - 1
@@ -3782,7 +3746,6 @@ def mostrar_presentacion_ejecutiva():
                 return None
             return df_8col.iloc[fila_idx, c_idx]
 
-        # Mercado INEGI DENUE desde nuevo-leon-municipios.csv
         if muni_sel == "AREA MONTERREY 2":
             denue_val = sum(mapa_denue.values()) if mapa_denue else 0
         else:
@@ -3820,8 +3783,42 @@ def mostrar_presentacion_ejecutiva():
         ])
         render_tabla_compacta(df_inv_final)
 
+        # 3. VENTA POR CLASE (Cols U:V) y PORTABILIDAD (Cols W:Y)
+        sub_c1, sub_c2 = st.columns(2, gap="small")
+        with sub_c1:
+            st.markdown('<div class="titulo-bloque">Venta por Clase</div>', unsafe_allow_html=True)
+            df_clase = pd.DataFrame([
+                {"Clase": "Comerciales", "Mes": _leer_abg_col("U")},
+                {"Clase": "Residenciales", "Mes": _leer_abg_col("V")},
+            ])
+            render_tabla_compacta(df_clase)
+
+        with sub_c2:
+            st.markdown('<div class="titulo-bloque">Portabilidad</div>', unsafe_allow_html=True)
+            df_porta = pd.DataFrame([
+                {"Concepto": "Mes Act Porta", "Dato": _leer_abg_col("W")},
+                {"Concepto": "Mes Act Donado", "Dato": _leer_abg_col("X")},
+                {"Concepto": "Relacion Mes Porta", "Dato": _leer_abg_col("Y", es_pct=True)},
+            ])
+            render_tabla_compacta(df_porta)
+
+        # 4. BAJAS (Debajo de Venta por Clase y Portabilidad)
+        st.markdown('<div class="titulo-bloque">Bajas</div>', unsafe_allow_html=True)
+        df_bajas = pd.DataFrame([
+            {"Concepto": "Mes Act Baja", "Valor": _leer_abg_col("AP")},
+            {"Concepto": "Mes Act Aa Baja", "Valor": _leer_abg_col("AQ")},
+            {"Concepto": "Mes Ant Baja", "Valor": _leer_abg_col("AR")},
+            {"Concepto": "Mes Act vs Mes Ant Baja", "Valor": _leer_abg_col("AS", es_pct=True)},
+            {"Concepto": "Mes Act vs Mismo Mes AA Baja", "Valor": _leer_abg_col("AT", es_pct=True)},
+            {"Concepto": "Año Act Baja", "Valor": _leer_abg_col("AX")},
+            {"Concepto": "Año Ant Baja", "Valor": _leer_abg_col("AY")},
+            {"Concepto": "Año Act vs Año Ant Baja", "Valor": _leer_abg_col("AZ", es_pct=True)},
+        ])
+        render_tabla_compacta(df_bajas)
+
     # --------------------------------------------------------
-    # COLUMNA CENTRAL: MAPA INTERACTIVO + BACKLOG + QUEJAS + TOP 3 DISTRITOS
+    # COLUMNA CENTRAL:
+    # 1. Mapa -> 2. Backlog/COPE -> 3. Top 3 Distritos -> 4. Gráfica Ganancia -> 5. Ganancia Acumulada
     # --------------------------------------------------------
     with col_centro:
         df_coords = pd.DataFrame({
@@ -3911,7 +3908,7 @@ def mostrar_presentacion_ejecutiva():
                 zoom=9.1,
                 center={"lat": 25.74, "lon": -100.42},
                 opacity=0.65,
-                height=310
+                height=290
             )
         else:
             fig_mapa = px.scatter_map(
@@ -3924,7 +3921,7 @@ def mostrar_presentacion_ejecutiva():
                 map_style="carto-positron",
                 zoom=9.1,
                 center={"lat": 25.74, "lon": -100.42},
-                height=310
+                height=290
             )
             fig_mapa.update_traces(marker=dict(sizemin=18))
 
@@ -3958,7 +3955,7 @@ def mostrar_presentacion_ejecutiva():
                     st.markdown('<div class="titulo-bloque">🚩 Quejas por COPE</div>', unsafe_allow_html=True)
                     render_tabla_compacta(t_cope)
 
-        # Top 3 Distritos por Zona (a todo el ancho de la columna central, con columnas "distrito" y "cant")
+        # Top 3 Distritos por Zona
         if not df_q_view.empty:
             zonas_con_datos = []
             for z_nom in ["ANAHUAC", "LA FE-ESTADIO", "ESCOBEDO"]:
@@ -3981,8 +3978,72 @@ def mostrar_presentacion_ejecutiva():
                         st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
                         render_tabla_compacta(df_z_tabla, mini=True)
 
+        # Gráfica Ganancia Mensual (BC:BK) debajo de las tablas por zonas
+        st.markdown(f'<div class="titulo-bloque">Ganancia Mensual — {muni_sel}</div>', unsafe_allow_html=True)
+        cols_ganancia = ["BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK"]
+        nombres_default = [
+            "Enero", "Febrero", "Marzo",
+            "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Octubre"
+        ]
+        datos_graf = []
+        for i, col_l in enumerate(cols_ganancia):
+            idx = _col_excel_a_idx(col_l)
+            etiqueta_mes = nombres_default[i]
+            valor_num = 0.0
+            if info_abg:
+                if idx < len(info_abg["titulos"]) and pd.notna(info_abg["titulos"][idx]):
+                    t_str = str(info_abg["titulos"][idx]).strip()
+                    if t_str:
+                        # Acortamos "Enero Ganancia" -> "Enero" para que quepa limpio en el centro
+                        etiqueta_mes = t_str.replace(" Ganancia", "").replace(" GANANCIA", "").strip()
+                if idx < len(info_abg["valores"]) and pd.notna(info_abg["valores"][idx]):
+                    try:
+                        valor_num = float(str(info_abg["valores"][idx]).replace(",", ""))
+                    except ValueError:
+                        valor_num = 0.0
+            datos_graf.append({
+                "Mes": etiqueta_mes,
+                "Ganancia": int(round(valor_num)),
+                "Etiqueta": f"{int(round(valor_num)):,}"
+            })
+
+        df_ganancia_graf = pd.DataFrame(datos_graf)
+        fig_gan = px.line(
+            df_ganancia_graf,
+            x="Mes",
+            y="Ganancia",
+            text="Etiqueta",
+            markers=True,
+            height=210
+        )
+        fig_gan.update_traces(
+            line=dict(color="#156082", width=2.5),
+            marker=dict(size=7, color="#156082"),
+            textposition="top center",
+            textfont=dict(size=10, color="#333333")
+        )
+        fig_gan.update_layout(
+            margin=dict(l=10, r=20, t=20, b=10),
+            xaxis_title=None,
+            yaxis_title=None,
+            plot_bgcolor="white",
+            yaxis=dict(gridcolor="#e0e0e0", zeroline=True, zerolinecolor="#999999", tickfont=dict(size=10)),
+            xaxis=dict(showgrid=False, tickfont=dict(size=10))
+        )
+        st.plotly_chart(fig_gan, width="stretch", key="grafica_ganancia_mty2")
+
+        # Tabla Ganancia Acumulada (BA:BB) justo debajo de la gráfica
+        st.markdown('<div class="titulo-bloque">Ganancia Acumulada</div>', unsafe_allow_html=True)
+        df_gan_anual = pd.DataFrame([
+            {"Concepto": "Año Act Ganancia", "Valor": _leer_abg_col("BA")},
+            {"Concepto": "Año Ant Ganancia", "Valor": _leer_abg_col("BB")},
+        ])
+        render_tabla_compacta(df_gan_anual)
+
     # --------------------------------------------------------
-    # COLUMNA DERECHA: CANAL (N:T) + BOLSA POR CANAL + BOLSA ÁREA
+    # COLUMNA DERECHA:
+    # 1. CANAL (Venta del Mes) -> 2. Bolsa Área -> 3. Bolsa por Canal
     # --------------------------------------------------------
     with col_der:
         # 1. CANAL — Resultado por Canal de Venta (Cols N:T)
@@ -4016,16 +4077,7 @@ def mostrar_presentacion_ejecutiva():
         )
         render_tabla_compacta(df_canal_venta[["Canal", "Ventas", "%"]])
 
-        # 2. BOLSA POR CANAL (Posición inferior)
-        if not df_b_view.empty and "CANAL" in df_b_view.columns:
-            df_can_bolsa = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
-            if not df_can_bolsa.empty:
-                st.markdown('<div class="titulo-bloque">Bolsa por Canal</div>', unsafe_allow_html=True)
-                total_c = df_can_bolsa["FOLIOS"].sum()
-                df_can_bolsa["%"] = (df_can_bolsa["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
-                render_tabla_compacta(df_can_bolsa)
-
-        # 3. BOLSA ÁREA
+        # 2. BOLSA ÁREA (Justo debajo de CANAL Venta del Mes)
         if not df_b_view.empty and "ESTATUS_AGR_N2" in df_b_view.columns:
             df_6m_p = df_b_view[df_b_view["ULTIMOS_6_MESES"] == "SI"]
             t_bolsa = (
@@ -4037,73 +4089,14 @@ def mostrar_presentacion_ejecutiva():
                 st.markdown('<div class="titulo-bloque">Bolsa Área</div>', unsafe_allow_html=True)
                 render_tabla_compacta(t_bolsa)
 
-    # ========================================================
-    # SECCIÓN INFERIOR: GRÁFICA GANANCIA (BC:BK) + RESUMEN ANUAL (BA:BB)
-    # ========================================================
-    st.markdown("---")
-    col_graf_gan, col_res_gan = st.columns([3.2, 1.0], gap="medium")
-
-    with col_graf_gan:
-        st.markdown(f'<div class="titulo-bloque">Ganancia Mensual — {muni_sel}</div>', unsafe_allow_html=True)
-        cols_ganancia = ["BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK"]
-        nombres_default = [
-            "Enero Ganancia", "Febrero Ganancia", "Marzo Ganancia",
-            "Abril Ganancia", "Mayo Ganancia", "Junio Ganancia",
-            "Julio Ganancia", "Agosto Ganancia", "Octubre Ganancia"
-        ]
-        datos_graf = []
-        for i, col_l in enumerate(cols_ganancia):
-            idx = _col_excel_a_idx(col_l)
-            etiqueta_mes = nombres_default[i]
-            valor_num = 0.0
-            if info_abg:
-                if idx < len(info_abg["titulos"]) and pd.notna(info_abg["titulos"][idx]):
-                    t_str = str(info_abg["titulos"][idx]).strip()
-                    if t_str:
-                        etiqueta_mes = t_str
-                if idx < len(info_abg["valores"]) and pd.notna(info_abg["valores"][idx]):
-                    try:
-                        valor_num = float(str(info_abg["valores"][idx]).replace(",", ""))
-                    except ValueError:
-                        valor_num = 0.0
-            datos_graf.append({
-                "Mes": etiqueta_mes,
-                "Ganancia": int(round(valor_num)),
-                "Etiqueta": f"{int(round(valor_num)):,}"
-            })
-
-        df_ganancia_graf = pd.DataFrame(datos_graf)
-        fig_gan = px.line(
-            df_ganancia_graf,
-            x="Mes",
-            y="Ganancia",
-            text="Etiqueta",
-            markers=True,
-            height=260
-        )
-        fig_gan.update_traces(
-            line=dict(color="#156082", width=3),
-            marker=dict(size=8, color="#156082"),
-            textposition="middle right",
-            textfont=dict(size=11, color="#333333")
-        )
-        fig_gan.update_layout(
-            margin=dict(l=10, r=35, t=15, b=10),
-            xaxis_title=None,
-            yaxis_title=None,
-            plot_bgcolor="white",
-            yaxis=dict(gridcolor="#e0e0e0", zeroline=True, zerolinecolor="#999999"),
-            xaxis=dict(showgrid=False)
-        )
-        st.plotly_chart(fig_gan, width="stretch", key="grafica_ganancia_mty2")
-
-    with col_res_gan:
-        st.markdown('<div class="titulo-bloque">Ganancia Acumulada</div>', unsafe_allow_html=True)
-        df_gan_anual = pd.DataFrame([
-            {"Concepto": "Año Act Ganancia", "Valor": _leer_abg_col("BA")},
-            {"Concepto": "Año Ant Ganancia", "Valor": _leer_abg_col("BB")},
-        ])
-        render_tabla_compacta(df_gan_anual)
+        # 3. BOLSA POR CANAL (Debajo de Bolsa Área)
+        if not df_b_view.empty and "CANAL" in df_b_view.columns:
+            df_can_bolsa = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
+            if not df_can_bolsa.empty:
+                st.markdown('<div class="titulo-bloque">Bolsa por Canal</div>', unsafe_allow_html=True)
+                total_c = df_can_bolsa["FOLIOS"].sum()
+                df_can_bolsa["%"] = (df_can_bolsa["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
+                render_tabla_compacta(df_can_bolsa)
 # ============================================================
 # 6. RUTEO PRINCIPAL
 # ============================================================
