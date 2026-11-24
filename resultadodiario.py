@@ -3482,6 +3482,7 @@ def mostrar_presentacion_ejecutiva():
         if st.session_state.muni_activo != "AREA MONTERREY 2":
             if st.button("🔄 Vista General MTY 2", width="stretch"):
                 st.session_state.muni_activo = "AREA MONTERREY 2"
+                st.session_state.mapa_reset_id += 1
                 st.rerun()
 
     # --------------------------------------------------------
