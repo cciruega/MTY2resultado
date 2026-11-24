@@ -4079,7 +4079,15 @@ def mostrar_presentacion_ejecutiva():
 
         # 2. BOLSA ÁREA (Justo debajo de CANAL Venta del Mes)
         if not df_b_view.empty and "ESTATUS_AGR_N2" in df_b_view.columns:
-            df_6m_p = df_b_view[df_b_view["ULTIMOS_6_MESES"] == "SI"]
+            estatus_excluir = [
+                "10 NO VENTAS + CD",
+                "7. ASPECTOS TÉCNICOS",
+                "7. ASPECTOS TECNICOS"
+            ]
+            df_6m_p = df_b_view[
+                (df_b_view["ULTIMOS_6_MESES"] == "SI") &
+                (~df_b_view["ESTATUS_AGR_N2"].isin(estatus_excluir))
+            ]
             t_bolsa = (
                 df_6m_p.groupby("ESTATUS_AGR_N2").size()
                 .rename("Total").reset_index()
