@@ -3939,10 +3939,20 @@ def mostrar_presentacion_ejecutiva():
 
         # Backlog por TIENDA + Quejas por COPE
         t_backlog = _tabla_resumen_dilacion_quejas(df_q_view, "TIENDA") if not df_q_view.empty else pd.DataFrame()
-        t_cope = (
-            df_q_view.groupby("cope").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
-            if not df_q_view.empty else pd.DataFrame()
-        )
+        if not df_q_view.empty:
+            t_cope = (
+                df_q_view.groupby("cope").size()
+                .sort_values(ascending=False)
+                .rename("FOLIOS")
+                .reset_index()
+            )
+            fila_total_cope = pd.DataFrame([{
+                "cope": "Total",
+                "FOLIOS": int(t_cope["FOLIOS"].sum())
+            }])
+            t_cope = pd.concat([t_cope, fila_total_cope], ignore_index=True)
+        else:
+            t_cope = pd.DataFrame()
 
         if not t_backlog.empty or not t_cope.empty:
             sub_b1, sub_b2 = st.columns([1.3, 0.9], gap="small")
