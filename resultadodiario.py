@@ -4053,13 +4053,14 @@ def mostrar_presentacion_ejecutiva():
                         st.markdown(f'<div class="sub-bloque">{z_nom}</div>', unsafe_allow_html=True)
                         render_tabla_compacta(df_z_tabla, mini=True)
 
-        # Gráfica Ganancia Mensual (BC:BK) debajo de las tablas por zonas
+        # Gráfica Ganancia Mensual (BC:BL) debajo de las tablas por zonas
         st.markdown(f'<div class="titulo-bloque">Ganancia Mensual — {muni_sel}</div>', unsafe_allow_html=True)
-        cols_ganancia = ["BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK"]
+        cols_ganancia = ["BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK", "BL"]
         nombres_default = [
             "Enero", "Febrero", "Marzo",
             "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Octubre"
+            "Julio", "Agosto", "Septiembre"
+            "Octubre"
         ]
         datos_graf = []
         for i, col_l in enumerate(cols_ganancia):
