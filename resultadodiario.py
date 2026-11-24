@@ -3574,7 +3574,7 @@ def mostrar_presentacion_ejecutiva():
                 return pd.read_excel(os.path.join(dir_actual, archivo), header=None)
         return None
 
-@st.cache_data(ttl=3600, show_spinner=False)
+    @st.cache_data(ttl=3600, show_spinner=False)
     def _cargar_mapa_distrito_municipio():
         ruta_dtos = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dtos municipio.xlsx")
         if not os.path.exists(ruta_dtos):
