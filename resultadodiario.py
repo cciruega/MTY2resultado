@@ -4059,7 +4059,7 @@ def mostrar_presentacion_ejecutiva():
         nombres_default = [
             "Enero", "Febrero", "Marzo",
             "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre"
+            "Julio", "Agosto", "Septiembre",
             "Octubre"
         ]
         datos_graf = []
