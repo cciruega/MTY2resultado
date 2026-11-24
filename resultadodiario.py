@@ -3574,6 +3574,48 @@ def mostrar_presentacion_ejecutiva():
                 return pd.read_excel(os.path.join(dir_actual, archivo), header=None)
         return None
 
+@st.cache_data(ttl=3600, show_spinner=False)
+    def _cargar_mapa_distrito_municipio():
+        ruta_dtos = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dtos municipio.xlsx")
+        if not os.path.exists(ruta_dtos):
+            return {}, {}
+
+        df_dt = pd.read_excel(ruta_dtos)
+        if df_dt.empty or len(df_dt.columns) < 3:
+            return {}, {}
+
+        reemplazos = {
+            "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U",
+            "GENERAL ESCOBEDO": "ESCOBEDO",
+            "SAN NICOLAS DE LOS GARZA": "SAN NICOLAS"
+        }
+
+        def _norm_muni(val):
+            s = str(val).strip().upper()
+            for k, v in reemplazos.items():
+                s = s.replace(k, v)
+            return s
+
+        # Col A (0): Distrito | Col B (1): CENTRAL | Col C (2): MUNICIPIO
+        mapa_dto_muni = {}
+        central_munis = {}
+
+        for _, row in df_dt.iterrows():
+            dto = str(row.iloc[0]).strip().upper()
+            central = str(row.iloc[1]).strip().upper()
+            muni = _norm_muni(row.iloc[2])
+
+            if dto and dto != "NAN" and muni and muni != "NAN":
+                mapa_dto_muni[dto] = muni
+            if central and central != "NAN" and muni and muni != "NAN":
+                central_munis.setdefault(central, set()).add(muni)
+
+        # Respaldo: si una central atiende un solo municipio, se asigna por prefijo de 3 letras
+        mapa_central_unico = {
+            c: next(iter(ms)) for c, ms in central_munis.items() if len(ms) == 1
+        }
+        return mapa_dto_muni, mapa_central_unico
+
     @st.cache_data(ttl=3600, show_spinner=False)
     def _cargar_denue_nl():
         ruta_csv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nuevo-leon-municipios.csv")
@@ -3679,6 +3721,7 @@ def mostrar_presentacion_ejecutiva():
         datos_abg_todos, bytes_8col_cd = obtener_datos_abg_y_8col_clarodrive()
         df_8col = _cargar_df_8_columnas(bytes_8col_cd)
         mapa_denue = _cargar_denue_nl()
+        mapa_dto_muni, mapa_central_unico = _cargar_mapa_distrito_municipio()
 
     muni_sel = st.session_state.muni_activo
     clave_abg_actual = MAPA_MUNI_ARCHIVO_ABG.get(muni_sel, "ABG AREA")
@@ -3703,10 +3746,30 @@ def mostrar_presentacion_ejecutiva():
         df_bolsas_mty2[df_bolsas_mty2['TIENDA_CORTA'].isin(tiendas_filtradas)]
         if not df_bolsas_mty2.empty else pd.DataFrame()
     )
-    df_q_view = (
-        df_quejas_mty2[df_quejas_mty2['TIENDA'].isin(tiendas_filtradas)]
-        if not df_quejas_mty2.empty else pd.DataFrame()
-    )
+
+    # Filtrado exacto de Quejas por distrito_co -> MUNICIPIO (dtos municipio.xlsx)
+    if not df_quejas_mty2.empty:
+        df_q_calc = df_quejas_mty2.copy()
+        col_dto = "distrito_co" if "distrito_co" in df_q_calc.columns else df_q_calc.columns[46]
+        dtos_norm = df_q_calc[col_dto].fillna("").astype(str).str.strip().str.upper()
+
+        if mapa_dto_muni:
+            muni_asignado = dtos_norm.map(mapa_dto_muni)
+            # Respaldo por central (primeros 3 caracteres) si el distrito aún no figura en el Excel
+            sin_match = muni_asignado.isna()
+            if sin_match.any() and mapa_central_unico:
+                muni_asignado.loc[sin_match] = dtos_norm.loc[sin_match].str[:3].map(mapa_central_unico)
+
+            df_q_calc["MUNI_DTO"] = muni_asignado.fillna("")
+            if muni_sel == "AREA MONTERREY 2":
+                df_q_view = df_q_calc
+            else:
+                df_q_view = df_q_calc[df_q_calc["MUNI_DTO"] == muni_sel]
+        else:
+            df_q_view = df_q_calc[df_q_calc["TIENDA"].isin(tiendas_filtradas)]
+    else:
+        df_q_view = pd.DataFrame()
+        )
 
     # ========================================================
     # ESTRUCTURA DE 3 COLUMNAS
