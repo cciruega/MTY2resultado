@@ -3415,7 +3415,7 @@ def mostrar_presentacion_ejecutiva():
         st.markdown("".join(html), unsafe_allow_html=True)
 
     MAPA_MUNICIPIO_TIENDAS = {
-        "GARCIA": ["SFE"],
+        "GARCIA": ["SCA"],
         "SANTA CATARINA": ["SCA"],
         "ESCOBEDO": ["GES"],
         "SAN NICOLAS": ["PUN"],
