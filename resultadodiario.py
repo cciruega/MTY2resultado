@@ -3992,12 +3992,15 @@ def mostrar_presentacion_ejecutiva():
 
         fig_mapa.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False, clickmode="event+select")
 
-        evento = st.plotly_chart(
-            fig_mapa,
-            width="stretch",
-            on_select="rerun",
-            key=f"mapa_ejecutivo_mty2_{st.session_state.mapa_reset_id}"
-        )
+        evento = st.plotly_chart(fig_mapa, width="stretch", on_select="rerun", key="f"mapa_ejecutivo_mty2_{st.session_state.mapa_reset_id}"")
+        if evento and getattr(evento, "selection", None) and evento.selection.get("points"):
+            pt = evento.selection["points"][0]
+            muni_clic = pt.get("hovertext") or pt.get("location") or pt.get("text")
+            if muni_clic:
+                muni_clic = str(muni_clic).upper().strip()
+                if muni_clic in MAPA_MUNICIPIO_TIENDAS and muni_clic != st.session_state.muni_activo:
+                    st.session_state.muni_activo = muni_clic
+                    st.rerun()
 
         # Backlog por TIENDA + Quejas por COPE
         t_backlog = _tabla_resumen_dilacion_quejas(df_q_view, "TIENDA") if not df_q_view.empty else pd.DataFrame()
