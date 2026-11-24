@@ -3769,7 +3769,6 @@ def mostrar_presentacion_ejecutiva():
             df_q_view = df_q_calc[df_q_calc["TIENDA"].isin(tiendas_filtradas)]
     else:
         df_q_view = pd.DataFrame()
-        )
 
     # ========================================================
     # ESTRUCTURA DE 3 COLUMNAS
