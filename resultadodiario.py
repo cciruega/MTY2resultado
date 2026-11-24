@@ -3992,7 +3992,7 @@ def mostrar_presentacion_ejecutiva():
 
         fig_mapa.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False, clickmode="event+select")
 
-        evento = st.plotly_chart(fig_mapa, width="stretch", on_select="rerun", key="f"mapa_ejecutivo_mty2_{st.session_state.mapa_reset_id})
+        evento = st.plotly_chart(fig_mapa, width="stretch", on_select="rerun", key=f"mapa_ejecutivo_mty2_{st.session_state.mapa_reset_id}")
         if evento and getattr(evento, "selection", None) and evento.selection.get("points"):
             pt = evento.selection["points"][0]
             muni_clic = pt.get("hovertext") or pt.get("location") or pt.get("text")
