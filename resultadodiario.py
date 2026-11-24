@@ -3450,6 +3450,8 @@ def mostrar_presentacion_ejecutiva():
 
     if "muni_activo" not in st.session_state:
         st.session_state.muni_activo = "AREA MONTERREY 2"
+    if "mapa_reset_id" not in st.session_state:
+        st.session_state.mapa_reset_id = 0
 
     # --------------------------------------------------------
     # BARRA LATERAL: CARGA DE FUENTES COMPLEMENTARIAS
