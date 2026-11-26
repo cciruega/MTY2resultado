@@ -4182,9 +4182,12 @@ def mostrar_presentacion_ejecutiva():
                 st.markdown('<div class="titulo-bloque">Bolsa Área</div>', unsafe_allow_html=True)
                 render_tabla_compacta(t_bolsa)
 
-        # 3. BOLSA POR CANAL (Debajo de Bolsa Área)
-        if not df_b_view.empty and "CANAL" in df_b_view.columns:
-            df_can_bolsa = df_b_view.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
+        # 3. BOLSA POR CANAL (Debajo de Bolsa Área - Solo Bolsa 5: Instaladores)
+        if not df_b_view.empty and "CANAL" in df_b_view.columns and "ESTATUS_AGR_N1" in df_b_view.columns:
+            df_bolsa5_canal = df_b_view[
+                df_b_view["ESTATUS_AGR_N1"].astype(str).str.strip().str.upper() == "5 EN PROCESO (INSTALADORES)"
+            ]
+            df_can_bolsa = df_bolsa5_canal.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
             if not df_can_bolsa.empty:
                 st.markdown('<div class="titulo-bloque">Bolsa por Canal</div>', unsafe_allow_html=True)
                 total_c = df_can_bolsa["FOLIOS"].sum()
