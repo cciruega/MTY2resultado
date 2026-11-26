@@ -3353,18 +3353,18 @@ def mostrar_presentacion_ejecutiva():
             .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
             .titulo-bloque {
                 background-color: #002060; color: white; padding: 4px 8px;
-                font-weight: bold; font-size: 12.5px; border-radius: 3px;
+                font-weight: bold; font-size: 13px; border-radius: 3px;
                 margin-top: 8px; margin-bottom: 4px; text-align: left;
             }
             .sub-bloque {
                 background-color: #1f4e78; color: white; padding: 3px 4px;
-                font-weight: bold; font-size: 10.5px; text-align: center;
+                font-weight: bold; font-size: 11.5px; text-align: center;
                 border-radius: 2px; margin-bottom: 3px; white-space: nowrap;
             }
             .tabla-ejecutiva {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 11.5px;
+                font-size: 12.5px;
                 margin-bottom: 6px;
             }
             .tabla-ejecutiva th {
@@ -3382,7 +3382,7 @@ def mostrar_presentacion_ejecutiva():
             }
             .tabla-ejecutiva tr:nth-child(even) { background-color: #f4f7fa; }
             .tabla-mini {
-                font-size: 10.5px;
+                font-size: 11.5px;
             }
             .tabla-mini th, .tabla-mini td {
                 padding: 2px 4px;
@@ -3395,21 +3395,30 @@ def mostrar_presentacion_ejecutiva():
             return
         if cols_izq is None:
             cols_izq = [df_in.columns[0]]
+
+        cols_negritas = {
+            "VALOR", "DATO", "MES", "FOLIOS", "%", "CANT",
+            "TOTAL", "VENTAS", ">=3", ">=6", ">=9", ">10"
+        }
+
         clase_extra = " tabla-mini" if mini else ""
         html = [f'<table class="tabla-ejecutiva{clase_extra}"><thead><tr>']
         for col in df_in.columns:
             html.append(f"<th>{escape(str(col))}</th>")
         html.append("</tr></thead><tbody>")
         for _, row in df_in.iterrows():
-            html.append("<tr>")
+            es_total = str(row[df_in.columns[0]]).strip().upper() == "TOTAL"
+            estilo_fila = ' style="font-weight:bold; background-color:#dce6f1; border-top:1.5px solid #1f4e78;"' if es_total else ""
+            html.append(f"<tr{estilo_fila}>")
             for col in df_in.columns:
                 alineacion = "left" if col in cols_izq else "center"
+                negrita_celda = " font-weight:bold;" if str(col).strip().upper() in cols_negritas else ""
                 val = row[col]
                 if isinstance(val, (int, np.integer)):
                     val_str = f"{val:,}"
                 else:
                     val_str = escape(str(val))
-                html.append(f'<td style="text-align:{alineacion};">{val_str}</td>')
+                html.append(f'<td style="text-align:{alineacion};{negrita_celda}">{val_str}</td>')
             html.append("</tr>")
         html.append("</tbody></table>")
         st.markdown("".join(html), unsafe_allow_html=True)
