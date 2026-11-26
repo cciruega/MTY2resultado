@@ -4189,7 +4189,7 @@ def mostrar_presentacion_ejecutiva():
             ]
             df_can_bolsa = df_bolsa5_canal.groupby("CANAL").size().sort_values(ascending=False).rename("FOLIOS").reset_index()
             if not df_can_bolsa.empty:
-                st.markdown('<div class="titulo-bloque">Bolsa por Canal</div>', unsafe_allow_html=True)
+                st.markdown('<div class="titulo-bloque">Bolsa 5 por Canal</div>', unsafe_allow_html=True)
                 total_c = df_can_bolsa["FOLIOS"].sum()
                 df_can_bolsa["%"] = (df_can_bolsa["FOLIOS"] / total_c * 100).round(0).astype(int).astype(str) + "%"
                 render_tabla_compacta(df_can_bolsa)
